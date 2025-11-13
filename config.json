@@ -1,0 +1,9 @@
+{
+  "timezone": "GMT",
+  "default_date_range": {
+    "preset": "last-30-days"
+  },
+  "models": [
+    "fal-ai/nano-banana/edit"
+  ]
+}
