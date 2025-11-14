@@ -3,6 +3,7 @@ fal.ai API 클라이언트
 Usage API 호출 및 페이지네이션 처리
 """
 import requests  # type: ignore
+import time
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 import date_utils
@@ -80,6 +81,65 @@ class FalAPIClient:
         # ISO8601 형식으로 변환
         start_str, end_str = date_utils.format_date_range_for_api(start, end, include_time=True)
         
+        # 모델이 2개 이하일 때는 한 번에 호출, 3개 이상일 때는 개별 호출
+        # (API가 3개 이상의 모델을 한 번에 처리하지 못하는 경우 대비)
+        if len(endpoint_ids) <= 2:
+            return self._get_usage_single(endpoint_ids, start_str, end_str, timeframe, timezone, expand, bound_to_timeframe)
+        else:
+            # 각 모델을 개별적으로 호출하고 결과 합치기
+            all_summaries = []
+            all_time_series = []
+            
+            for i, endpoint_id in enumerate(endpoint_ids):
+                result = self._get_usage_single([endpoint_id], start_str, end_str, timeframe, timezone, expand, bound_to_timeframe)
+                
+                # summary 데이터 합치기 (result에서 직접 추출)
+                summary = result.get("summary")
+                if isinstance(summary, list):
+                    all_summaries.extend(summary)
+                elif summary:
+                    all_summaries.append(summary)
+                
+                # time_series 데이터 합치기 (result에서 직접 추출)
+                time_series = result.get("time_series")
+                if isinstance(time_series, list):
+                    all_time_series.extend(time_series)
+                elif time_series:
+                    all_time_series.append(time_series)
+                
+                # Rate Limit 방지를 위해 마지막 호출이 아니면 지연 시간 추가
+                if i < len(endpoint_ids) - 1:
+                    time.sleep(0.5)  # 0.5초 지연
+            
+            # 최종 응답 구성
+            result = {
+                "summary": all_summaries,
+                "time_series": all_time_series,
+                "next_cursor": None,
+                "has_more": False,
+                "_meta": {
+                    "start": start_str,
+                    "end": end_str,
+                    "timezone": timezone,
+                    "timeframe": timeframe,
+                    "endpoint_ids": endpoint_ids,
+                    "expand": expand if isinstance(expand, list) else expand.split(",") if expand else []
+                }
+            }
+            
+            return result
+    
+    def _get_usage_single(
+        self,
+        endpoint_ids: List[str],
+        start_str: str,
+        end_str: str,
+        timeframe: Optional[str],
+        timezone: str,
+        expand: List[str],
+        bound_to_timeframe: bool
+    ) -> Dict[str, Any]:
+        """단일 API 호출 (내부 메서드)"""
         # 파라미터 구성
         params = {
             "endpoint_id": ",".join(endpoint_ids),  # 쉼표 구분 형식
@@ -104,19 +164,49 @@ class FalAPIClient:
             if cursor:
                 params["cursor"] = cursor
             
-            # API 호출
-            response = requests.get(USAGE_ENDPOINT, headers=self.headers, params=params)
+            # API 호출 (Rate Limit 재시도 포함)
+            max_retries = 3
+            retry_delay = 1.0  # 초기 재시도 지연 시간 (초)
             
-            # 에러 처리
-            if response.status_code != 200:
-                error_msg = f"API 호출 실패: {response.status_code}"
-                try:
-                    error_data = response.json()
-                    if "detail" in error_data:
-                        error_msg += f" - {error_data['detail']}"
-                except:
-                    error_msg += f" - {response.text}"
-                raise requests.exceptions.HTTPError(error_msg)
+            for attempt in range(max_retries):
+                response = requests.get(USAGE_ENDPOINT, headers=self.headers, params=params)
+                
+                # 429 Rate Limit 에러인 경우 재시도
+                if response.status_code == 429:
+                    if attempt < max_retries - 1:
+                        # Retry-After 헤더가 있으면 사용, 없으면 지수 백오프
+                        retry_after = response.headers.get("Retry-After")
+                        if retry_after:
+                            wait_time = float(retry_after)
+                        else:
+                            wait_time = retry_delay * (2 ** attempt)  # 지수 백오프
+                        
+                        time.sleep(wait_time)
+                        continue
+                    else:
+                        # 최대 재시도 횟수 초과
+                        error_msg = f"API 호출 실패: {response.status_code} (Rate Limit, 재시도 횟수 초과)"
+                        try:
+                            error_data = response.json()
+                            if "detail" in error_data:
+                                error_msg += f" - {error_data['detail']}"
+                        except:
+                            error_msg += f" - {response.text}"
+                        raise requests.exceptions.HTTPError(error_msg)
+                
+                # 다른 에러 처리
+                if response.status_code != 200:
+                    error_msg = f"API 호출 실패: {response.status_code}"
+                    try:
+                        error_data = response.json()
+                        if "detail" in error_data:
+                            error_msg += f" - {error_data['detail']}"
+                    except:
+                        error_msg += f" - {response.text}"
+                    raise requests.exceptions.HTTPError(error_msg)
+                
+                # 성공한 경우 루프 종료
+                break
             
             data = response.json()
             
