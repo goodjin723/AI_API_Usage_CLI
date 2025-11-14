@@ -61,21 +61,28 @@ def _get_default_config() -> Dict[str, Any]:
     }
 
 
-def get_api_key(cli_api_key: Optional[str] = None) -> str:
+def get_api_key(cli_api_key: Optional[str] = None) -> Optional[str]:
     """
     fal.ai Admin API 키 가져오기
-    우선순위: CLI 옵션 > 환경 변수 > 에러
+    우선순위: CLI 옵션 > config.json > 환경 변수 > None
     """
     if cli_api_key:
         return cli_api_key
     
+    config = get_config()
+    api_key = config.get("api_key")
+    if api_key:
+        return api_key
+    
     api_key = os.getenv("FAL_ADMIN_API_KEY")
-    if not api_key:
-        raise ValueError(
-            "fal.ai Admin API 키가 필요합니다. "
-            "환경 변수 FAL_ADMIN_API_KEY를 설정하거나 -api-key 옵션을 사용하세요."
-        )
     return api_key
+
+
+def save_api_key(api_key: str) -> None:
+    """API 키를 config.json에 저장"""
+    config = get_config()
+    config["api_key"] = api_key
+    save_config(config)
 
 def save_models(models: List[str]) -> None:
     """모델 목록을 config.json에 저장"""
