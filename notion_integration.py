@@ -1,0 +1,415 @@
+"""
+Notion API 클라이언트
+데이터베이스 조회 및 페이지 생성/업데이트
+"""
+from typing import Dict, Any, List, Optional
+from datetime import datetime
+from notion_client import Client  # type: ignore
+import config
+
+
+def format_notion_id(database_id: str) -> str:
+    """
+    Notion 데이터베이스 ID를 올바른 형식으로 변환
+    하이픈이 없으면 추가 (8-4-4-4-12 형식)
+    
+    Args:
+        database_id: 원본 데이터베이스 ID
+    
+    Returns:
+        형식화된 데이터베이스 ID
+    """
+    # 공백 제거
+    database_id = database_id.strip()
+    
+    # 이미 하이픈이 있으면 그대로 반환 (올바른 형식)
+    if "-" in database_id:
+        return database_id
+    
+    # 하이픈 제거
+    clean_id = database_id.replace("-", "")
+    
+    # 32자리 16진수인지 확인
+    if len(clean_id) != 32:
+        # 32자리가 아니면 원본 반환 (사용자가 입력한 형식 그대로)
+        return database_id
+    
+    # 하이픈 추가 (8-4-4-4-12)
+    return f"{clean_id[:8]}-{clean_id[8:12]}-{clean_id[12:16]}-{clean_id[16:20]}-{clean_id[20:]}"
+
+
+class NotionClient:
+    """Notion API 클라이언트"""
+    
+    def __init__(self, api_key: str):
+        """
+        Args:
+            api_key: Notion API 키
+        """
+        self.client = Client(auth=api_key)
+    
+    def check_database_exists(self, database_id: str, verbose: bool = False) -> bool:
+        """
+        데이터베이스 존재 여부 확인
+        
+        Args:
+            database_id: Notion 데이터베이스 ID
+            verbose: 상세 디버깅 정보 출력 여부
+        
+        Returns:
+            데이터베이스 존재 여부
+        """
+        try:
+            # ID 형식 변환
+            formatted_id = format_notion_id(database_id)
+            if verbose:
+                print(f"[DEBUG] 원본 데이터베이스 ID: {database_id}")
+                print(f"[DEBUG] 형식화된 데이터베이스 ID: {formatted_id}")
+                print(f"[DEBUG] 데이터베이스 조회 시도 중...")
+            
+            response = self.client.databases.retrieve(database_id=formatted_id)
+            
+            if verbose:
+                print(f"[DEBUG] 데이터베이스 조회 성공!")
+                db_title = response.get("title", [])
+                if db_title:
+                    title_text = db_title[0].get("plain_text", "N/A") if isinstance(db_title, list) else "N/A"
+                    print(f"[DEBUG] 데이터베이스 제목: {title_text}")
+                print(f"[DEBUG] 데이터베이스 속성: {list(response.get('properties', {}).keys())}")
+            
+            return True
+        except Exception as e:
+            error_msg = str(e)
+            formatted_id = format_notion_id(database_id)
+            
+            print(f"[ERROR] 데이터베이스 확인 실패: {error_msg}")
+            print(f"[DEBUG] 원본 ID: {database_id}")
+            print(f"[DEBUG] 형식화된 ID: {formatted_id}")
+            print(f"[DEBUG] ID 길이: {len(database_id.replace('-', ''))} (하이픈 제거 후)")
+            
+            if "Could not find database" in error_msg:
+                print(f"[INFO] 해결 방법:")
+                print(f"          1. Notion에서 데이터베이스 페이지 열기")
+                print(f"          2. 우측 상단 '...' 메뉴 > 'Connections' 선택")
+                print(f"          3. Integration을 데이터베이스에 연결")
+                print(f"          4. 데이터베이스 ID가 올바른지 확인 (URL에서 추출)")
+                print(f"          5. URL 형식: https://www.notion.so/workspace/데이터베이스ID?v=...")
+            elif "unauthorized" in error_msg.lower() or "permission" in error_msg.lower():
+                print(f"[INFO] 권한 문제일 수 있습니다. Integration이 데이터베이스에 연결되어 있는지 확인하세요.")
+            
+            if verbose:
+                import traceback
+                print(f"[DEBUG] 상세 에러:")
+                traceback.print_exc()
+            
+            return False
+    
+    def find_existing_page(
+        self,
+        database_id: str,
+        date: str,
+        model: str
+    ) -> Optional[str]:
+        """
+        기존 페이지 찾기 (날짜 + 모델 조합)
+        
+        Args:
+            database_id: Notion 데이터베이스 ID
+            date: 날짜 (YYYY-MM-DD 형식)
+            model: 모델 ID
+        
+        Returns:
+            페이지 ID (없으면 None)
+        """
+        try:
+            # ID 형식 변환
+            formatted_id = format_notion_id(database_id)
+            # 먼저 날짜로만 필터링
+            response = self.client.databases.query(
+                database_id=formatted_id,
+                filter={
+                    "property": "Date",
+                    "date": {
+                        "equals": date
+                    }
+                }
+            )
+            
+            # 결과에서 모델이 일치하는 페이지 찾기
+            for page in response.get("results", []):
+                properties = page.get("properties", {})
+                model_prop = properties.get("Model", {})
+                
+                # Model 필드 타입에 따라 처리
+                model_value = None
+                if model_prop.get("type") == "title":
+                    title = model_prop.get("title", [])
+                    if title:
+                        model_value = title[0].get("plain_text", "")
+                elif model_prop.get("type") == "rich_text":
+                    rich_text = model_prop.get("rich_text", [])
+                    if rich_text:
+                        model_value = rich_text[0].get("plain_text", "")
+                elif model_prop.get("type") == "select":
+                    select = model_prop.get("select")
+                    if select:
+                        model_value = select.get("name", "")
+                
+                if model_value == model:
+                    return page.get("id")
+            
+            return None
+        except Exception as e:
+            print(f"[ERROR] 기존 페이지 찾기 실패: {e}")
+            return None
+    
+    def create_page(
+        self,
+        database_id: str,
+        date: str,
+        model: str,
+        requests: int,
+        quantity: int,
+        cost: float,
+        unit_price: float,
+        verbose: bool = False
+    ) -> Optional[str]:
+        """
+        새 페이지 생성
+        
+        Args:
+            database_id: Notion 데이터베이스 ID
+            date: 날짜 (YYYY-MM-DD 형식)
+            model: 모델 ID
+            requests: 요청 수
+            quantity: 사용량
+            cost: 비용
+            unit_price: 단가
+        
+        Returns:
+            생성된 페이지 ID (실패 시 None)
+        """
+        try:
+            # ID 형식 변환
+            formatted_id = format_notion_id(database_id)
+            if verbose:
+                print(f"[DEBUG] 데이터베이스 ID: {formatted_id}")
+            
+            # 날짜 파싱
+            date_obj = datetime.strptime(date, "%Y-%m-%d")
+            if verbose:
+                print(f"[DEBUG] 날짜: {date} -> {date_obj.isoformat()}")
+            
+            # 페이지 속성 구성
+            properties = {
+                "Date": {
+                    "date": {
+                        "start": date_obj.isoformat()
+                    }
+                },
+                "Model": {
+                    "title": [
+                        {
+                            "text": {
+                                "content": model
+                            }
+                        }
+                    ]
+                },
+                "Requests": {
+                    "number": requests
+                },
+                "Quantity": {
+                    "number": quantity
+                },
+                "Cost": {
+                    "number": cost
+                },
+                "Unit Price": {
+                    "number": unit_price
+                }
+            }
+            
+            if verbose:
+                print(f"[DEBUG] 페이지 속성:")
+                print(f"  - Date: {date_obj.isoformat()}")
+                print(f"  - Model: {model}")
+                print(f"  - Requests: {requests}")
+                print(f"  - Quantity: {quantity}")
+                print(f"  - Cost: {cost}")
+                print(f"  - Unit Price: {unit_price}")
+            
+            # 페이지 생성
+            if verbose:
+                print(f"[DEBUG] Notion API 호출 중...")
+            response = self.client.pages.create(
+                parent={"database_id": formatted_id},
+                properties=properties
+            )
+            
+            page_id = response.get("id")
+            if verbose:
+                print(f"[DEBUG] 페이지 생성 성공! 페이지 ID: {page_id}")
+            
+            return page_id
+        except Exception as e:
+            import traceback
+            error_msg = str(e)
+            print(f"[ERROR] Notion 페이지 생성 실패: {error_msg}")
+            
+            if verbose:
+                print(f"[DEBUG] 상세 에러 정보:")
+                traceback.print_exc()
+                print(f"[DEBUG] 입력 데이터:")
+                print(f"  - database_id: {database_id}")
+                print(f"  - date: {date}")
+                print(f"  - model: {model}")
+                print(f"  - requests: {requests}")
+                print(f"  - quantity: {quantity}")
+                print(f"  - cost: {cost}")
+                print(f"  - unit_price: {unit_price}")
+            
+            # 특정 에러 타입에 대한 안내
+            if "property" in error_msg.lower() and "does not exist" in error_msg.lower():
+                print(f"[INFO] 필드 이름이 데이터베이스에 존재하지 않습니다.")
+                print(f"[INFO] 필수 필드: Date, Model, Requests, Quantity, Cost, Unit Price")
+                print(f"[INFO] 필드 이름은 대소문자와 공백을 정확히 일치시켜야 합니다.")
+            elif "validation" in error_msg.lower():
+                print(f"[INFO] 필드 타입이 올바르지 않을 수 있습니다.")
+                print(f"[INFO] Date는 Date 타입, Model은 Title/Rich Text/Select, 나머지는 Number 타입이어야 합니다.")
+            
+            return None
+    
+    def update_page(
+        self,
+        page_id: str,
+        requests: int,
+        quantity: int,
+        cost: float,
+        unit_price: float
+    ) -> bool:
+        """
+        기존 페이지 업데이트
+        
+        Args:
+            page_id: Notion 페이지 ID
+            requests: 요청 수
+            quantity: 사용량
+            cost: 비용
+            unit_price: 단가
+        
+        Returns:
+            업데이트 성공 여부
+        """
+        try:
+            properties = {
+                "Requests": {
+                    "number": requests
+                },
+                "Quantity": {
+                    "number": quantity
+                },
+                "Cost": {
+                    "number": cost
+                },
+                "Unit Price": {
+                    "number": unit_price
+                }
+            }
+            
+            self.client.pages.update(page_id=page_id, properties=properties)
+            return True
+        except Exception as e:
+            print(f"[ERROR] Notion 페이지 업데이트 실패: {e}")
+            return False
+    
+    def save_usage_data(
+        self,
+        database_id: str,
+        records: List[Dict[str, Any]],
+        update_existing: bool = False,
+        verbose: bool = False
+    ) -> Dict[str, int]:
+        """
+        사용량 데이터를 Notion에 저장
+        
+        Args:
+            database_id: Notion 데이터베이스 ID
+            records: 저장할 데이터 리스트 (각 항목은 date, model, requests, quantity, cost, unit_price 포함)
+            update_existing: 기존 페이지가 있으면 업데이트할지 여부
+            verbose: 상세 디버깅 정보 출력 여부
+        
+        Returns:
+            {"created": 생성된 개수, "updated": 업데이트된 개수, "skipped": 스킵된 개수}
+        """
+        stats = {"created": 0, "updated": 0, "skipped": 0}
+        
+        if not records:
+            print("[WARNING] 저장할 레코드가 없습니다.")
+            return stats
+        
+        formatted_id = format_notion_id(database_id)
+        if verbose:
+            print(f"[DEBUG] 저장할 레코드 수: {len(records)}")
+            print(f"[DEBUG] 데이터베이스 ID: {formatted_id}")
+        
+        for idx, record in enumerate(records, 1):
+            if verbose:
+                print(f"\n[DEBUG] 레코드 {idx}/{len(records)} 처리 중...")
+                print(f"[DEBUG] 레코드 내용: {record}")
+            date = record.get("date")
+            model = record.get("model")
+            requests = record.get("requests", 0)
+            quantity = record.get("quantity", 0)
+            cost = record.get("cost", 0.0)
+            unit_price = record.get("unit_price", 0.0)
+            
+            if not date or not model:
+                if verbose:
+                    print(f"[WARNING] 날짜 또는 모델이 없어서 스킵: date={date}, model={model}")
+                stats["skipped"] += 1
+                continue
+            
+            # 기존 페이지 확인
+            if verbose:
+                print(f"[DEBUG] 기존 페이지 확인 중: date={date}, model={model}")
+            existing_page_id = self.find_existing_page(database_id, date, model)
+            
+            if existing_page_id:
+                if verbose:
+                    print(f"[DEBUG] 기존 페이지 발견: {existing_page_id}")
+                if update_existing:
+                    # 업데이트
+                    if verbose:
+                        print(f"[DEBUG] 페이지 업데이트 시도 중...")
+                    if self.update_page(existing_page_id, requests, quantity, cost, unit_price):
+                        if verbose:
+                            print(f"[DEBUG] 페이지 업데이트 성공!")
+                        stats["updated"] += 1
+                    else:
+                        if verbose:
+                            print(f"[DEBUG] 페이지 업데이트 실패")
+                        stats["skipped"] += 1
+                else:
+                    if verbose:
+                        print(f"[DEBUG] 기존 페이지가 있어서 스킵 (update_existing=False)")
+                    # 스킵
+                    stats["skipped"] += 1
+            else:
+                if verbose:
+                    print(f"[DEBUG] 새 페이지 생성 시도 중...")
+                # 새로 생성
+                page_id = self.create_page(
+                    database_id, date, model, requests, quantity, cost, unit_price, verbose=verbose
+                )
+                if page_id:
+                    if verbose:
+                        print(f"[DEBUG] 페이지 생성 성공: {page_id}")
+                    stats["created"] += 1
+                else:
+                    if verbose:
+                        print(f"[DEBUG] 페이지 생성 실패")
+                    stats["skipped"] += 1
+        
+        return stats
+

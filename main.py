@@ -10,6 +10,8 @@ import api_client
 import config
 import date_utils
 import formatter
+import usage_tracker
+import notion_integration
 
 
 def parse_args() -> argparse.Namespace:
@@ -164,16 +166,17 @@ def show_main_menu() -> int:
     print("1. 모델 관리")
     print("2. 날짜 범위 설정")
     print("3. API 키 설정")
-    print("4. 조회 실행")
-    print("5. 종료")
+    print("4. Notion 설정")
+    print("5. 조회 실행")
+    print("6. 종료")
     print("="*60)
     
     while True:
         try:
-            choice = input("\n선택하세요 (1-5): ").strip()
-            if choice in ["1", "2", "3", "4", "5"]:
+            choice = input("\n선택하세요 (1-6): ").strip()
+            if choice in ["1", "2", "3", "4", "5", "6"]:
                 return int(choice)
-            print("[ERROR] 1-5 사이의 숫자를 입력하세요.")
+            print("[ERROR] 1-6 사이의 숫자를 입력하세요.")
         except KeyboardInterrupt:
             print("\n\n프로그램을 종료합니다.")
             sys.exit(0)
@@ -385,6 +388,91 @@ def show_api_key_menu() -> None:
         print(f"[ERROR] {e}")
 
 
+def show_notion_menu() -> None:
+    """Notion 설정 메뉴"""
+    while True:
+        print("\n" + "="*60)
+        print("Notion 설정")
+        print("="*60)
+        
+        # Notion API 키 확인
+        notion_api_key = config.get_notion_api_key()
+        if notion_api_key:
+            masked_key = notion_api_key[:8] + "..." + notion_api_key[-4:] if len(notion_api_key) > 12 else "***"
+            print(f"\n현재 Notion API 키: {masked_key}")
+        else:
+            print("\n등록된 Notion API 키가 없습니다.")
+        
+        # 등록된 데이터베이스 목록
+        databases = config.get_all_notion_databases()
+        if databases:
+            print("\n등록된 데이터베이스:")
+            for auth_method, db_id in databases.items():
+                masked_db_id = db_id[:8] + "..." + db_id[-4:] if len(db_id) > 12 else db_id
+                print(f"  - {auth_method}: {masked_db_id}")
+        else:
+            print("\n등록된 데이터베이스가 없습니다.")
+        
+        print("\n1. Notion API 키 입력/변경")
+        print("2. 데이터베이스 ID 추가/수정")
+        print("3. 데이터베이스 ID 삭제")
+        print("4. 뒤로 가기")
+        print("="*60)
+        
+        try:
+            choice = input("\n선택하세요 (1-4): ").strip()
+            if choice == "1":
+                notion_api_key = input("\nNotion API 키를 입력하세요: ").strip()
+                if notion_api_key:
+                    try:
+                        config.save_notion_api_key(notion_api_key)
+                        print("[SUCCESS] Notion API 키가 저장되었습니다.")
+                    except Exception as e:
+                        print(f"[ERROR] Notion API 키 저장 실패: {e}")
+                else:
+                    print("[ERROR] Notion API 키를 입력해주세요.")
+            elif choice == "2":
+                auth_method = input("\n키 별칭 (auth_method)을 입력하세요: ").strip()
+                if not auth_method:
+                    print("[ERROR] 키 별칭을 입력해주세요.")
+                    continue
+                
+                database_id = input("Notion 데이터베이스 ID를 입력하세요: ").strip()
+                if database_id:
+                    config.save_notion_database_id(auth_method, database_id)
+                    print(f"[SUCCESS] '{auth_method}'의 데이터베이스 ID가 저장되었습니다.")
+                else:
+                    print("[ERROR] 데이터베이스 ID를 입력해주세요.")
+            elif choice == "3":
+                databases = config.get_all_notion_databases()
+                if not databases:
+                    print("[INFO] 삭제할 데이터베이스가 없습니다.")
+                    continue
+                
+                print("\n삭제할 데이터베이스의 키 별칭을 입력하세요:")
+                for auth_method in databases.keys():
+                    print(f"  - {auth_method}")
+                
+                auth_method = input("\n키 별칭: ").strip()
+                if auth_method in databases:
+                    # config에서 제거
+                    config_data = config.get_config()
+                    if "notion_databases" in config_data:
+                        del config_data["notion_databases"][auth_method]
+                        config.save_config(config_data)
+                    print(f"[SUCCESS] '{auth_method}'의 데이터베이스 ID가 삭제되었습니다.")
+                else:
+                    print(f"[ERROR] '{auth_method}'를 찾을 수 없습니다.")
+            elif choice == "4":
+                break
+            else:
+                print("[ERROR] 1-4 사이의 숫자를 입력하세요.")
+        except KeyboardInterrupt:
+            break
+        except Exception as e:
+            print(f"[ERROR] {e}")
+
+
 def validate_and_execute_query(args: argparse.Namespace) -> None:
     """필수 값 검증 후 조회 실행"""
     # API 키 확인
@@ -411,6 +499,105 @@ def validate_and_execute_query(args: argparse.Namespace) -> None:
     
     # 조회 실행
     execute_query(args, api_key, models, start, end)
+
+
+def save_to_notion(
+    usage_data: Dict[str, Any],
+    pricing_data: Dict[str, Any],
+    cli_notion_api_key: Optional[str],
+    dry_run: bool,
+    verbose: bool
+) -> None:
+    """Notion에 데이터 저장"""
+    try:
+        # Notion API 키 확인
+        notion_api_key = config.get_notion_api_key(cli_notion_api_key)
+        if not notion_api_key:
+            print("\n[ERROR] Notion API 키가 설정되지 않았습니다.")
+            print("환경 변수 NOTION_API_KEY를 설정하거나 -notion-api-key 옵션을 사용하세요.")
+            return
+        
+        # Notion 클라이언트 생성
+        notion = notion_integration.NotionClient(notion_api_key)
+        
+        # 사용량 데이터를 Notion 형식으로 변환
+        notion_data_by_auth = usage_tracker.format_for_notion(usage_data, pricing_data)
+        
+        if not notion_data_by_auth:
+            print("\n[INFO] 저장할 Notion 데이터가 없습니다.")
+            return
+        
+        if dry_run:
+            print("\n[DRY-RUN] Notion 저장 모드 (실제 저장 안 함)")
+            for auth_method, records in notion_data_by_auth.items():
+                print(f"  - {auth_method}: {len(records)}개 레코드")
+            return
+        
+        # auth_method별로 데이터 저장
+        total_created = 0
+        total_updated = 0
+        total_skipped = 0
+        
+        if verbose:
+            print(f"\n[DEBUG] 변환된 데이터: {len(notion_data_by_auth)}개 auth_method")
+            for auth_method, records in notion_data_by_auth.items():
+                print(f"  - {auth_method}: {len(records)}개 레코드")
+        
+        for auth_method, records in notion_data_by_auth.items():
+            if verbose:
+                print(f"\n[DEBUG] 처리 중인 auth_method: '{auth_method}' ({len(records)}개 레코드)")
+            
+            # 해당 auth_method의 데이터베이스 ID 가져오기
+            database_id = config.get_notion_database_id(auth_method)
+            
+            # 데이터베이스 ID가 없으면 등록된 모든 데이터베이스 확인
+            if not database_id:
+                all_databases = config.get_all_notion_databases()
+                
+                # 등록된 데이터베이스가 하나만 있으면 자동으로 사용
+                if len(all_databases) == 1:
+                    database_id = list(all_databases.values())[0]
+                    if verbose:
+                        print(f"[INFO] '{auth_method}'의 데이터베이스 ID가 없어서 유일한 데이터베이스를 사용합니다.")
+                else:
+                    if verbose:
+                        print(f"[WARNING] '{auth_method}'의 Notion 데이터베이스 ID가 설정되지 않았습니다.")
+                        print(f"          등록된 데이터베이스 키: {list(all_databases.keys())}")
+                        print(f"          {len(records)}개 레코드가 스킵되었습니다.")
+                        print(f"\n[INFO] 해결 방법:")
+                        print(f"          1. 인터랙티브 메뉴에서 '4. Notion 설정' > '2. 데이터베이스 ID 추가/수정' 선택")
+                        print(f"          2. 키 별칭에 '{auth_method}' 입력")
+                        print(f"          3. 해당 데이터베이스 ID 입력")
+                    total_skipped += len(records)
+                    continue
+            
+            # 데이터베이스 존재 여부 확인
+            if verbose:
+                print(f"[DEBUG] 데이터베이스 ID 확인 중: {database_id}")
+            if not notion.check_database_exists(database_id, verbose=verbose):
+                print(f"\n[ERROR] '{auth_method}'의 데이터베이스(ID: {database_id})를 찾을 수 없습니다.")
+                total_skipped += len(records)
+                continue
+            
+            # 데이터 저장
+            if verbose:
+                print(f"\n[INFO] '{auth_method}' 데이터베이스에 저장 중... ({len(records)}개 레코드)")
+            
+            stats = notion.save_usage_data(database_id, records, update_existing=False, verbose=verbose)
+            total_created += stats["created"]
+            total_updated += stats["updated"]
+            total_skipped += stats["skipped"]
+            
+            if verbose:
+                print(f"[INFO] 생성: {stats['created']}, 업데이트: {stats['updated']}, 스킵: {stats['skipped']}")
+        
+        print(f"\n[SUCCESS] Notion 저장 완료 (생성: {total_created}, 업데이트: {total_updated}, 스킵: {total_skipped})")
+        
+    except Exception as e:
+        print(f"\n[ERROR] Notion 저장 중 오류 발생: {e}")
+        if verbose:
+            import traceback
+            traceback.print_exc()
 
 
 def execute_query(
@@ -463,10 +650,7 @@ def execute_query(
         
         # Notion 저장
         if args.notion:
-            if args.dry_run:
-                print("\n[DRY-RUN] Notion 저장 모드 (실제 저장 안 함)")
-            else:
-                print("\n[INFO] Notion 저장 기능은 아직 구현되지 않았습니다.")
+            save_to_notion(usage_data, pricing_data, args.notion_api_key, args.dry_run, args.verbose)
         
         if args.verbose:
             print("\n[SUCCESS] 작업 완료")
@@ -542,9 +726,11 @@ def interactive_mode(args: argparse.Namespace) -> None:
         elif choice == 3:
             show_api_key_menu()
         elif choice == 4:
+            show_notion_menu()
+        elif choice == 5:
             validate_and_execute_query(args)
             input("\n계속하려면 엔터를 누르세요...")
-        elif choice == 5:
+        elif choice == 6:
             print("\n프로그램을 종료합니다.")
             break
 

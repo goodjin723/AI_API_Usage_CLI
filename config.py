@@ -110,6 +110,51 @@ def set_timezone(timezone: str) -> None:
     save_config(config)
 
 
+def save_notion_database_id(auth_method: str, database_id: str) -> None:
+    """auth_method별 Notion 데이터베이스 ID 저장"""
+    config = get_config()
+    if "notion_databases" not in config:
+        config["notion_databases"] = {}
+    config["notion_databases"][auth_method] = database_id
+    save_config(config)
+
+
+def get_notion_database_id(auth_method: str) -> Optional[str]:
+    """auth_method별 Notion 데이터베이스 ID 가져오기"""
+    config = get_config()
+    notion_databases = config.get("notion_databases", {})
+    return notion_databases.get(auth_method)
+
+
+def get_all_notion_databases() -> Dict[str, str]:
+    """모든 Notion 데이터베이스 ID 가져오기"""
+    config = get_config()
+    return config.get("notion_databases", {})
+
+
+def get_notion_api_key(cli_notion_api_key: Optional[str] = None) -> Optional[str]:
+    """
+    Notion API 키 가져오기
+    우선순위: CLI 옵션 > config.json > 환경 변수 > None
+    """
+    if cli_notion_api_key:
+        return cli_notion_api_key
+    
+    config_data = get_config()
+    notion_api_key = config_data.get("notion_api_key")
+    if notion_api_key:
+        return notion_api_key
+    
+    return os.getenv("NOTION_API_KEY")
+
+
+def save_notion_api_key(api_key: str) -> None:
+    """Notion API 키를 config.json에 저장"""
+    config_data = get_config()
+    config_data["notion_api_key"] = api_key
+    save_config(config_data)
+
+
 # 모듈 로드 시 환경 변수 자동 로딩
 load_env()
 
