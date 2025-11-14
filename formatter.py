@@ -28,17 +28,13 @@ def parse_usage_data(usage_data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Usage API 응답 데이터 파싱
     
+    공식 문서 형식:
+    - time_series: [{"bucket": "...", "results": [...]}, ...]
+    - summary: [{"endpoint_id": "...", "quantity": ..., "cost": ...}, ...]
+    
     Returns:
         파싱된 데이터 구조
     """
-    # 리스트 형식인 경우 딕셔너리로 변환
-    if isinstance(usage_data, list):
-        usage_data = {
-            "items": usage_data,
-            "_meta": {}
-        }
-    
-    # 딕셔너리가 아닌 경우 기본값 반환
     if not isinstance(usage_data, dict):
         return {
             "meta": {},
@@ -50,41 +46,29 @@ def parse_usage_data(usage_data: Dict[str, Any]) -> Dict[str, Any]:
     
     meta = usage_data.get("_meta", {})
     
-    # items 또는 data 필드 확인
-    items = usage_data.get("items", usage_data.get("data", []))
+    # 최상위 time_series 추출 (공식 문서 형식)
+    time_series = usage_data.get("time_series", [])
+    if not isinstance(time_series, list):
+        time_series = []
     
-    # items가 리스트가 아닌 경우 리스트로 변환
-    if not isinstance(items, list):
-        items = [items] if items else []
-    
-    # summary 정보 추출
+    # 최상위 summary 추출 (리스트 형식)
     summary = usage_data.get("summary", {})
-    if not isinstance(summary, dict):
+    if not isinstance(summary, (dict, list)):
         summary = {}
     
-    # time_series 데이터 추출
-    time_series = []
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-        if "time_series" in item:
-            ts_data = item["time_series"]
-            if isinstance(ts_data, list):
-                time_series.extend(ts_data)
-            else:
-                time_series.append(ts_data)
-        elif "date" in item or "timestamp" in item:
-            time_series.append(item)
-    
-    # auth_method 정보 추출
+    # auth_method 정보 추출 (summary 리스트에서)
     auth_methods = {}
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-        if "auth_method" in item:
-            auth_info = item["auth_method"]
-            if isinstance(auth_info, dict):
-                key_alias = auth_info.get("key_alias", "Unknown")
+    if isinstance(summary, list):
+        for item in summary:
+            if isinstance(item, dict) and "auth_method" in item:
+                auth_method = item.get("auth_method")
+                if isinstance(auth_method, str):
+                    key_alias = auth_method
+                elif isinstance(auth_method, dict):
+                    key_alias = auth_method.get("key_alias", "Unknown")
+                else:
+                    key_alias = "Unknown"
+                
                 if key_alias not in auth_methods:
                     auth_methods[key_alias] = {
                         "requests": 0,
@@ -97,7 +81,7 @@ def parse_usage_data(usage_data: Dict[str, Any]) -> Dict[str, Any]:
         "summary": summary,
         "time_series": time_series,
         "auth_methods": auth_methods,
-        "raw_items": items
+        "raw_items": []
     }
 
 
@@ -110,8 +94,12 @@ def parse_pricing_data(pricing_data: Dict[str, Any]) -> Dict[str, str]:
     """
     pricing_map = {}
     
-    # items 또는 data 필드 확인
-    items = pricing_data.get("items", pricing_data.get("data", []))
+    # items, data, 또는 prices 필드 확인
+    items = pricing_data.get("items", pricing_data.get("data", pricing_data.get("prices", [])))
+    
+    # items가 리스트가 아닌 경우 리스트로 변환
+    if not isinstance(items, list):
+        items = [items] if items else []
     
     for item in items:
         if isinstance(item, dict):
@@ -137,44 +125,131 @@ def calculate_costs(
     
     # 모델별 집계
     model_stats = {}
+    # 키별 집계
+    auth_methods = parsed.get("auth_methods", {})
     total_requests = 0
     total_quantity = 0
     total_cost = 0.0
     
-    # time_series 데이터 처리
-    for entry in parsed["time_series"]:
-        endpoint_id = entry.get("endpoint_id") or entry.get("model")
-        if not endpoint_id:
+    # time_series 데이터 처리 (공식 문서 형식: bucket과 results 구조)
+    for bucket_entry in parsed["time_series"]:
+        if not isinstance(bucket_entry, dict):
             continue
         
-        if endpoint_id not in model_stats:
-            model_stats[endpoint_id] = {
-                "requests": 0,
-                "quantity": 0,
-                "cost": 0.0,
-                "unit_price": pricing_map.get(endpoint_id, 0.0)
-            }
+        # results 배열에서 모델별 데이터 추출
+        results = bucket_entry.get("results", [])
+        if not isinstance(results, list):
+            continue
         
-        requests = entry.get("requests", entry.get("count", 0))
-        quantity = entry.get("quantity", entry.get("units", requests))
-        
-        unit_price = pricing_map.get(endpoint_id, 0.0)
-        cost = quantity * unit_price
-        
-        model_stats[endpoint_id]["requests"] += requests
-        model_stats[endpoint_id]["quantity"] += quantity
-        model_stats[endpoint_id]["cost"] += cost
-        
-        total_requests += requests
-        total_quantity += quantity
-        total_cost += cost
+        for result in results:
+            if not isinstance(result, dict):
+                continue
+            
+            endpoint_id = result.get("endpoint_id")
+            if not endpoint_id:
+                continue
+            
+            quantity = result.get("quantity", 0)
+            unit_price = result.get("unit_price") or pricing_map.get(endpoint_id, 0.0)
+            cost = result.get("cost", quantity * unit_price)
+            
+            # requests는 quantity와 동일하게 처리 (API에서 제공하지 않는 경우)
+            requests = result.get("requests", quantity)
+            
+            # 모델별 집계
+            if endpoint_id not in model_stats:
+                model_stats[endpoint_id] = {
+                    "requests": 0,
+                    "quantity": 0,
+                    "cost": 0.0,
+                    "unit_price": unit_price
+                }
+            
+            model_stats[endpoint_id]["requests"] += requests
+            model_stats[endpoint_id]["quantity"] += quantity
+            model_stats[endpoint_id]["cost"] += cost
+            
+            # 키별 집계
+            auth_method = result.get("auth_method")
+            if auth_method:
+                if isinstance(auth_method, str):
+                    key_alias = auth_method
+                elif isinstance(auth_method, dict):
+                    key_alias = auth_method.get("key_alias", "Unknown")
+                else:
+                    key_alias = "Unknown"
+                
+                if key_alias not in auth_methods:
+                    auth_methods[key_alias] = {
+                        "requests": 0,
+                        "quantity": 0,
+                        "cost": 0.0
+                    }
+                
+                auth_methods[key_alias]["requests"] += requests
+                auth_methods[key_alias]["quantity"] += quantity
+                auth_methods[key_alias]["cost"] += cost
+            
+            total_requests += requests
+            total_quantity += quantity
+            total_cost += cost
     
-    # summary 데이터가 있으면 사용
-    if parsed["summary"]:
-        summary = parsed["summary"]
-        total_requests = summary.get("total_requests", total_requests)
-        total_quantity = summary.get("total_quantity", total_quantity)
-        total_cost = summary.get("total_cost", total_cost)
+    # summary 리스트 처리 (summary 형식)
+    if isinstance(parsed["summary"], list):
+        for item in parsed["summary"]:
+            if not isinstance(item, dict):
+                continue
+            
+            endpoint_id = item.get("endpoint_id")
+            if not endpoint_id:
+                continue
+            
+            quantity = item.get("quantity", item.get("units", 0))
+            cost = item.get("cost", 0.0)
+            requests = item.get("requests", item.get("count", quantity))
+            
+            # 모델별 집계
+            if endpoint_id not in model_stats:
+                model_stats[endpoint_id] = {
+                    "requests": 0,
+                    "quantity": 0,
+                    "cost": 0.0,
+                    "unit_price": pricing_map.get(endpoint_id, item.get("unit_price", 0.0))
+                }
+            
+            # cost가 이미 계산되어 있으면 사용, 없으면 계산
+            if cost == 0.0:
+                unit_price = pricing_map.get(endpoint_id, item.get("unit_price", 0.0))
+                cost = quantity * unit_price
+            
+            model_stats[endpoint_id]["requests"] += requests
+            model_stats[endpoint_id]["quantity"] += quantity
+            model_stats[endpoint_id]["cost"] += cost
+            
+            # 키별 집계
+            auth_method = item.get("auth_method")
+            if auth_method:
+                if isinstance(auth_method, str):
+                    key_alias = auth_method
+                elif isinstance(auth_method, dict):
+                    key_alias = auth_method.get("key_alias", "Unknown")
+                else:
+                    key_alias = "Unknown"
+                
+                if key_alias not in auth_methods:
+                    auth_methods[key_alias] = {
+                        "requests": 0,
+                        "quantity": 0,
+                        "cost": 0.0
+                    }
+                
+                auth_methods[key_alias]["requests"] += requests
+                auth_methods[key_alias]["quantity"] += quantity
+                auth_methods[key_alias]["cost"] += cost
+            
+            total_requests += requests
+            total_quantity += quantity
+            total_cost += cost
     
     return {
         "total": {
@@ -183,6 +258,7 @@ def calculate_costs(
             "cost": total_cost
         },
         "by_model": model_stats,
+        "by_auth_method": auth_methods,
         "meta": parsed["meta"]
     }
 
@@ -254,10 +330,9 @@ def print_model_table(calculated_data: Dict[str, Any]):
     console.print()
 
 
-def print_auth_method_table(usage_data: Dict[str, Any]):
+def print_auth_method_table(calculated_data: Dict[str, Any]):
     """사용자 키별 사용량 테이블 출력"""
-    parsed = parse_usage_data(usage_data)
-    auth_methods = parsed["auth_methods"]
+    auth_methods = calculated_data.get("by_auth_method", {})
     
     if not auth_methods:
         # auth_method 정보가 없으면 스킵
@@ -305,7 +380,7 @@ def format_for_display(
     
     print_summary_table(calculated_data)
     print_model_table(calculated_data)
-    print_auth_method_table(usage_data)
+    print_auth_method_table(calculated_data)
 
 
 def format_for_notion(

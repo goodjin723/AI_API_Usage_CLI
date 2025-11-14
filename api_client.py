@@ -132,20 +132,20 @@ class FalAPIClient:
                     all_data.append(data)
                 
                 # 페이지네이션 정보 확인
-                cursor = data.get("cursor")
+                # has_more와 next_cursor는 항상 response에 존재
                 has_more = data.get("has_more", False)
                 
-                # has_more가 null이면 더 이상 없음
-                if has_more is None:
-                    has_more = False
+                # has_more가 true일 때만 next_cursor가 유효한 값
+                # has_more가 false이면 next_cursor는 null
+                if has_more:
+                    cursor = data.get("next_cursor")
+                else:
+                    cursor = None
             else:
                 # 리스트 형식인 경우
                 all_data.extend(data)
                 has_more = False
-            
-            # cursor가 없으면 종료
-            if not cursor:
-                has_more = False
+                cursor = None
         
         # 최종 응답 구성
         # all_data가 비어있거나 리스트인 경우 항상 딕셔너리로 래핑

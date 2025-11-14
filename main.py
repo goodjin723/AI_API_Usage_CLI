@@ -3,6 +3,7 @@ fal.ai 사용량 추적 CLI
 """
 import argparse
 import sys
+import json
 from typing import Optional, List
 from datetime import datetime
 import api_client
