@@ -5,6 +5,7 @@ Notion API 클라이언트
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 from notion_client import Client  # type: ignore
+import requests
 import config
 
 
@@ -40,13 +41,15 @@ def format_notion_id(database_id: str) -> str:
 
 class NotionClient:
     """Notion API 클라이언트"""
-    
+
     def __init__(self, api_key: str):
         """
         Args:
             api_key: Notion API 키
         """
         self.client = Client(auth=api_key)
+        self.api_key = api_key
+        self.api_base_url = "https://api.notion.com/v1"
     
     def check_database_exists(self, database_id: str, verbose: bool = False) -> bool:
         """
@@ -109,75 +112,137 @@ class NotionClient:
         database_id: str,
         date: str,
         model: str,
-        time: Optional[str] = None
+        time: Optional[str] = None,
+        verbose: bool = False
     ) -> Optional[str]:
         """
         기존 페이지 찾기 (날짜 + 모델 조합, 시간 정보가 있으면 시간도 고려)
-        
+
         Args:
             database_id: Notion 데이터베이스 ID
             date: 날짜 (YYYY-MM-DD 형식)
             model: 모델 ID
             time: 시간 정보 (HH:MM:SS 형식, 선택적)
-        
+            verbose: 상세 디버깅 정보 출력 여부
+
         Returns:
             페이지 ID (없으면 None)
         """
         try:
             # ID 형식 변환
             formatted_id = format_notion_id(database_id)
-            # 먼저 날짜로만 필터링
-            response = self.client.databases.query(
-                database_id=formatted_id,
-                filter={
+
+            if verbose:
+                time_info = f", time={time}" if time else ""
+                print(f"[DEBUG] 중복 체크 시작: date={date}, model={model}{time_info}")
+
+            # 먼저 날짜로만 필터링 (HTTP API 직접 호출)
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+                "Notion-Version": "2022-06-28"
+            }
+
+            query_payload = {
+                "filter": {
                     "property": "Date",
                     "date": {
                         "equals": date
                     }
                 }
-            )
-            
+            }
+
+            query_url = f"{self.api_base_url}/databases/{formatted_id}/query"
+            response = requests.post(query_url, headers=headers, json=query_payload)
+
+            if response.status_code != 200:
+                if verbose:
+                    print(f"[ERROR] Notion API 쿼리 실패: {response.status_code} - {response.text}")
+                return None
+
+            response_data = response.json()
+            results = response_data.get("results", [])
+            if verbose:
+                print(f"[DEBUG] Date={date}로 필터링된 페이지 수: {len(results)}")
+
+            if not results:
+                if verbose:
+                    print(f"[DEBUG] 해당 날짜에 페이지가 없음 → 중복 아님")
+                return None
+
             # 결과에서 모델이 일치하는 페이지 찾기
-            for page in response.get("results", []):
+            for idx, page in enumerate(results):
                 properties = page.get("properties", {})
                 model_prop = properties.get("Model", {})
-                
+
+                if verbose:
+                    print(f"[DEBUG] 페이지 {idx+1} 검사 중...")
+                    print(f"[DEBUG]   - Model 필드 타입: {model_prop.get('type')}")
+
                 # Model 필드 타입에 따라 처리
                 model_value = None
                 if model_prop.get("type") == "title":
                     title = model_prop.get("title", [])
-                    if title:
+                    if title and len(title) > 0:
                         model_value = title[0].get("plain_text", "")
                 elif model_prop.get("type") == "rich_text":
                     rich_text = model_prop.get("rich_text", [])
-                    if rich_text:
+                    if rich_text and len(rich_text) > 0:
                         model_value = rich_text[0].get("plain_text", "")
                 elif model_prop.get("type") == "select":
                     select = model_prop.get("select")
                     if select:
                         model_value = select.get("name", "")
-                
+
+                if verbose:
+                    print(f"[DEBUG]   - 추출된 Model 값: '{model_value}'")
+                    print(f"[DEBUG]   - 비교 대상 Model: '{model}'")
+
                 # 모델이 일치하는지 확인
                 if model_value == model:
+                    if verbose:
+                        print(f"[DEBUG]   → Model 일치!")
+
                     # 시간 정보가 있으면 시간도 확인
                     if time:
                         time_prop = properties.get("Time", {})
                         time_value = None
                         if time_prop.get("type") == "rich_text":
                             rich_text = time_prop.get("rich_text", [])
-                            if rich_text:
+                            if rich_text and len(rich_text) > 0:
                                 time_value = rich_text[0].get("plain_text", "")
-                        
+
+                        if verbose:
+                            print(f"[DEBUG]   - 추출된 Time 값: '{time_value}'")
+                            print(f"[DEBUG]   - 비교 대상 Time: '{time}'")
+
                         # 시간이 일치하면 중복으로 판단
                         if time_value == time:
-                            return page.get("id")
+                            page_id = page.get("id")
+                            if verbose:
+                                print(f"[DEBUG]   → Time도 일치! 중복 페이지 발견: {page_id}")
+                            return page_id
+                        else:
+                            if verbose:
+                                print(f"[DEBUG]   → Time 불일치, 다음 페이지 검사")
                     else:
                         # 시간 정보가 없으면 모델만 일치해도 중복으로 판단
-                        return page.get("id")
-            
+                        page_id = page.get("id")
+                        if verbose:
+                            print(f"[DEBUG]   → 시간 비교 없음, 중복 페이지 발견: {page_id}")
+                        return page_id
+                else:
+                    if verbose:
+                        print(f"[DEBUG]   → Model 불일치, 다음 페이지 검사")
+
+            if verbose:
+                print(f"[DEBUG] 모든 페이지 검사 완료 → 중복 페이지 없음")
             return None
         except Exception as e:
             print(f"[ERROR] 기존 페이지 찾기 실패: {e}")
+            if verbose:
+                import traceback
+                traceback.print_exc()
             return None
     
     def create_page(
@@ -424,7 +489,7 @@ class NotionClient:
                     print(f"[DEBUG] 기존 페이지 확인 중: date={date}, model={model}, time={time}")
                 else:
                     print(f"[DEBUG] 기존 페이지 확인 중: date={date}, model={model}")
-            existing_page_id = self.find_existing_page(database_id, date, model, time=time)
+            existing_page_id = self.find_existing_page(database_id, date, model, time=time, verbose=verbose)
             
             if existing_page_id:
                 if verbose:
@@ -442,9 +507,12 @@ class NotionClient:
                             print(f"[DEBUG] 페이지 업데이트 실패")
                         stats["skipped"] += 1
                 else:
+                    # 중복 데이터 스킵
+                    time_info = f" ({time})" if time else ""
+                    print(f"[INFO] 중복 데이터 스킵: {date}{time_info} - {model}")
                     if verbose:
-                        print(f"[DEBUG] 기존 페이지가 있어서 스킵 (update_existing=False)")
-                    # 스킵
+                        print(f"[DEBUG] 기존 페이지 ID: {existing_page_id}")
+                        print(f"[DEBUG] update_existing=False이므로 스킵합니다.")
                     stats["skipped"] += 1
             else:
                 if verbose:

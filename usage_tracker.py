@@ -350,7 +350,7 @@ def format_for_notion(
                 continue
             
             quantity = result.get("quantity", 0)
-            unit_price = result.get("unit_price") or pricing_map.get(endpoint_id, 0.0)
+            unit_price = result.get("unit_price", 0.0)
             cost = result.get("cost", quantity * unit_price)
             requests = result.get("requests", quantity)
             

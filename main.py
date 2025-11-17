@@ -118,6 +118,12 @@ def parse_args() -> argparse.Namespace:
         help="실제 저장 없이 미리보기만 (Notion 저장 시)"
     )
     
+    parser.add_argument(
+        "-update-existing",
+        action="store_true",
+        help="Notion에 중복 데이터가 있으면 업데이트 (기본값: 중복 시 스킵)"
+    )
+    
     return parser.parse_args()
 
 
@@ -505,7 +511,8 @@ def save_to_notion(
     usage_data: Dict[str, Any],
     cli_notion_api_key: Optional[str],
     dry_run: bool,
-    verbose: bool
+    verbose: bool,
+    update_existing: bool = False
 ) -> None:
     """Notion에 데이터 저장"""
     try:
@@ -581,8 +588,12 @@ def save_to_notion(
             # 데이터 저장
             if verbose:
                 print(f"\n[INFO] '{auth_method}' 데이터베이스에 저장 중... ({len(records)}개 레코드)")
+            if update_existing:
+                print(f"[INFO] 중복 데이터 발견 시 업데이트 모드")
+            else:
+                print(f"[INFO] 중복 데이터 발견 시 스킵 모드 (중복 방지)")
             
-            stats = notion.save_usage_data(database_id, records, update_existing=False, verbose=verbose)
+            stats = notion.save_usage_data(database_id, records, update_existing=update_existing, verbose=verbose)
             total_created += stats["created"]
             total_updated += stats["updated"]
             total_skipped += stats["skipped"]
@@ -642,7 +653,7 @@ def execute_query(
         
         # Notion 저장
         if args.notion:
-            save_to_notion(usage_data, args.notion_api_key, args.dry_run, args.verbose)
+            save_to_notion(usage_data, args.notion_api_key, args.dry_run, args.verbose, args.update_existing)
         
         if args.verbose:
             print("\n[SUCCESS] 작업 완료")
