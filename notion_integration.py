@@ -114,7 +114,7 @@ class NotionClient:
         model: str,
         time: Optional[str] = None,
         verbose: bool = False
-    ) -> Optional[str]:
+    ) -> tuple[Optional[str], bool]:
         """
         기존 페이지 찾기 (날짜 + 모델 조합, 시간 정보가 있으면 시간도 고려)
 
@@ -126,7 +126,9 @@ class NotionClient:
             verbose: 상세 디버깅 정보 출력 여부
 
         Returns:
-            페이지 ID (없으면 None)
+            (페이지 ID, Time 업데이트 필요 여부) 튜플
+            - 페이지 ID: 없으면 None
+            - Time 업데이트 필요: True이면 기존 페이지에 Time이 없고 새 데이터에는 있음
         """
         try:
             # ID 형식 변환
@@ -168,7 +170,7 @@ class NotionClient:
             if not results:
                 if verbose:
                     print(f"[DEBUG] 해당 날짜에 페이지가 없음 → 중복 아님")
-                return None
+                return None, False
 
             # 결과에서 모델이 일치하는 페이지 찾기
             for idx, page in enumerate(results):
@@ -221,7 +223,13 @@ class NotionClient:
                             page_id = page.get("id")
                             if verbose:
                                 print(f"[DEBUG]   → Time도 일치! 중복 페이지 발견: {page_id}")
-                            return page_id
+                            return page_id, False
+                        elif not time_value:
+                            # 기존 페이지에 Time이 없고 새 데이터에는 있음 → Time 업데이트 필요
+                            page_id = page.get("id")
+                            if verbose:
+                                print(f"[DEBUG]   → 기존 페이지에 Time 없음, Time 업데이트 필요: {page_id}")
+                            return page_id, True
                         else:
                             if verbose:
                                 print(f"[DEBUG]   → Time 불일치, 다음 페이지 검사")
@@ -230,20 +238,20 @@ class NotionClient:
                         page_id = page.get("id")
                         if verbose:
                             print(f"[DEBUG]   → 시간 비교 없음, 중복 페이지 발견: {page_id}")
-                        return page_id
+                        return page_id, False
                 else:
                     if verbose:
                         print(f"[DEBUG]   → Model 불일치, 다음 페이지 검사")
 
             if verbose:
                 print(f"[DEBUG] 모든 페이지 검사 완료 → 중복 페이지 없음")
-            return None
+            return None, False
         except Exception as e:
             print(f"[ERROR] 기존 페이지 찾기 실패: {e}")
             if verbose:
                 import traceback
                 traceback.print_exc()
-            return None
+            return None, False
     
     def create_page(
         self,
@@ -398,37 +406,68 @@ class NotionClient:
         requests: int,
         quantity: int,
         cost: float,
-        unit_price: float
+        unit_price: float,
+        time: Optional[str] = None,
+        time_only: bool = False
     ) -> bool:
         """
         기존 페이지 업데이트
-        
+
         Args:
             page_id: Notion 페이지 ID
             requests: 요청 수
             quantity: 사용량
             cost: 비용
             unit_price: 단가
-        
+            time: 시간 정보 (HH:MM:SS 형식, 선택적)
+            time_only: True이면 Time 필드만 업데이트
+
         Returns:
             업데이트 성공 여부
         """
         try:
-            properties = {
-                "Requests": {
-                    "number": requests
-                },
-                "Quantity": {
-                    "number": quantity
-                },
-                "Cost ($)": {
-                    "number": cost
-                },
-                "Unit Price ($)": {
-                    "number": unit_price
+            if time_only and time:
+                # Time 필드만 업데이트
+                properties = {
+                    "Time": {
+                        "rich_text": [
+                            {
+                                "text": {
+                                    "content": time
+                                }
+                            }
+                        ]
+                    }
                 }
-            }
-            
+            else:
+                # 전체 필드 업데이트
+                properties = {
+                    "Requests": {
+                        "number": requests
+                    },
+                    "Quantity": {
+                        "number": quantity
+                    },
+                    "Cost ($)": {
+                        "number": cost
+                    },
+                    "Unit Price ($)": {
+                        "number": unit_price
+                    }
+                }
+
+                # 시간 정보가 있으면 Time 필드도 업데이트
+                if time:
+                    properties["Time"] = {
+                        "rich_text": [
+                            {
+                                "text": {
+                                    "content": time
+                                }
+                            }
+                        ]
+                    }
+
             self.client.pages.update(page_id=page_id, properties=properties)
             return True
         except Exception as e:
@@ -489,16 +528,33 @@ class NotionClient:
                     print(f"[DEBUG] 기존 페이지 확인 중: date={date}, model={model}, time={time}")
                 else:
                     print(f"[DEBUG] 기존 페이지 확인 중: date={date}, model={model}")
-            existing_page_id = self.find_existing_page(database_id, date, model, time=time, verbose=verbose)
-            
+            existing_page_id, needs_time_update = self.find_existing_page(database_id, date, model, time=time, verbose=verbose)
+
             if existing_page_id:
                 if verbose:
                     print(f"[DEBUG] 기존 페이지 발견: {existing_page_id}")
-                if update_existing:
-                    # 업데이트
+                    if needs_time_update:
+                        print(f"[DEBUG] Time 업데이트 필요!")
+
+                # Time만 업데이트하는 경우
+                if needs_time_update and time:
                     if verbose:
-                        print(f"[DEBUG] 페이지 업데이트 시도 중...")
-                    if self.update_page(existing_page_id, requests, quantity, cost, unit_price):
+                        print(f"[DEBUG] Time 필드만 업데이트 시도 중...")
+                    if self.update_page(existing_page_id, requests, quantity, cost, unit_price, time=time, time_only=True):
+                        time_info = f" ({time})" if time else ""
+                        print(f"[INFO] Time 필드 추가: {date}{time_info} - {model}")
+                        if verbose:
+                            print(f"[DEBUG] Time 업데이트 성공!")
+                        stats["updated"] += 1
+                    else:
+                        if verbose:
+                            print(f"[DEBUG] Time 업데이트 실패")
+                        stats["skipped"] += 1
+                # 전체 업데이트하는 경우
+                elif update_existing:
+                    if verbose:
+                        print(f"[DEBUG] 페이지 전체 업데이트 시도 중...")
+                    if self.update_page(existing_page_id, requests, quantity, cost, unit_price, time=time):
                         if verbose:
                             print(f"[DEBUG] 페이지 업데이트 성공!")
                         stats["updated"] += 1
@@ -506,8 +562,8 @@ class NotionClient:
                         if verbose:
                             print(f"[DEBUG] 페이지 업데이트 실패")
                         stats["skipped"] += 1
+                # 중복 데이터 스킵
                 else:
-                    # 중복 데이터 스킵
                     time_info = f" ({time})" if time else ""
                     print(f"[INFO] 중복 데이터 스킵: {date}{time_info} - {model}")
                     if verbose:
