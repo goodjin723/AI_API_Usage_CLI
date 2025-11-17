@@ -108,15 +108,17 @@ class NotionClient:
         self,
         database_id: str,
         date: str,
-        model: str
+        model: str,
+        time: Optional[str] = None
     ) -> Optional[str]:
         """
-        기존 페이지 찾기 (날짜 + 모델 조합)
+        기존 페이지 찾기 (날짜 + 모델 조합, 시간 정보가 있으면 시간도 고려)
         
         Args:
             database_id: Notion 데이터베이스 ID
             date: 날짜 (YYYY-MM-DD 형식)
             model: 모델 ID
+            time: 시간 정보 (HH:MM:SS 형식, 선택적)
         
         Returns:
             페이지 ID (없으면 None)
@@ -155,8 +157,23 @@ class NotionClient:
                     if select:
                         model_value = select.get("name", "")
                 
+                # 모델이 일치하는지 확인
                 if model_value == model:
-                    return page.get("id")
+                    # 시간 정보가 있으면 시간도 확인
+                    if time:
+                        time_prop = properties.get("Time", {})
+                        time_value = None
+                        if time_prop.get("type") == "rich_text":
+                            rich_text = time_prop.get("rich_text", [])
+                            if rich_text:
+                                time_value = rich_text[0].get("plain_text", "")
+                        
+                        # 시간이 일치하면 중복으로 판단
+                        if time_value == time:
+                            return page.get("id")
+                    else:
+                        # 시간 정보가 없으면 모델만 일치해도 중복으로 판단
+                        return page.get("id")
             
             return None
         except Exception as e:
@@ -172,6 +189,7 @@ class NotionClient:
         quantity: int,
         cost: float,
         unit_price: float,
+        time: Optional[str] = None,
         verbose: bool = False
     ) -> Optional[str]:
         """
@@ -185,6 +203,7 @@ class NotionClient:
             quantity: 사용량
             cost: 비용
             unit_price: 단가
+            time: 시간 정보 (HH:MM:SS 형식, 선택적)
         
         Returns:
             생성된 페이지 ID (실패 시 None)
@@ -195,26 +214,26 @@ class NotionClient:
             if verbose:
                 print(f"[DEBUG] 데이터베이스 ID: {formatted_id}")
             
-            # 날짜 파싱
+            # 날짜 파싱 (시간 없이 날짜만 사용)
             date_obj = datetime.strptime(date, "%Y-%m-%d")
+            date_str = date_obj.strftime("%Y-%m-%d")  # YYYY-MM-DD 형식으로 변환
             if verbose:
-                print(f"[DEBUG] 날짜: {date} -> {date_obj.isoformat()}")
+                if time:
+                    print(f"[DEBUG] 날짜: {date} -> {date_str} (시간 정보는 Time 필드에 별도 저장)")
+                else:
+                    print(f"[DEBUG] 날짜: {date} -> {date_str} (시간 제외, 날짜만)")
             
             # 페이지 속성 구성
             properties = {
                 "Date": {
                     "date": {
-                        "start": date_obj.isoformat()
+                        "start": date_str
                     }
                 },
                 "Model": {
-                    "title": [
-                        {
-                            "text": {
-                                "content": model
-                            }
-                        }
-                    ]
+                    "select": {
+                        "name": model
+                    }
                 },
                 "Requests": {
                     "number": requests
@@ -222,18 +241,34 @@ class NotionClient:
                 "Quantity": {
                     "number": quantity
                 },
-                "Cost": {
+                "Cost ($)": {
                     "number": cost
                 },
-                "Unit Price": {
+                "Unit Price ($)": {
                     "number": unit_price
                 }
             }
             
+            # 시간 정보가 있으면 Time 필드 추가
+            if time:
+                properties["Time"] = {
+                    "rich_text": [
+                        {
+                            "text": {
+                                "content": time
+                            }
+                        }
+                    ]
+                }
+            
             if verbose:
                 print(f"[DEBUG] 페이지 속성:")
-                print(f"  - Date: {date_obj.isoformat()}")
-                print(f"  - Model: {model}")
+                if time:
+                    print(f"  - Date: {date_str} (날짜만, 시간은 Time 필드에 별도 저장)")
+                    print(f"  - Time: {time}")
+                else:
+                    print(f"  - Date: {date_str} (날짜만)")
+                print(f"  - Model: {model} (select 타입)")
                 print(f"  - Requests: {requests}")
                 print(f"  - Quantity: {quantity}")
                 print(f"  - Cost: {cost}")
@@ -263,6 +298,7 @@ class NotionClient:
                 print(f"[DEBUG] 입력 데이터:")
                 print(f"  - database_id: {database_id}")
                 print(f"  - date: {date}")
+                print(f"  - time: {time}")
                 print(f"  - model: {model}")
                 print(f"  - requests: {requests}")
                 print(f"  - quantity: {quantity}")
@@ -272,11 +308,12 @@ class NotionClient:
             # 특정 에러 타입에 대한 안내
             if "property" in error_msg.lower() and "does not exist" in error_msg.lower():
                 print(f"[INFO] 필드 이름이 데이터베이스에 존재하지 않습니다.")
-                print(f"[INFO] 필수 필드: Date, Model, Requests, Quantity, Cost, Unit Price")
+                print(f"[INFO] 필수 필드: Date, Model, Requests, Quantity, Cost ($), Unit Price ($)")
                 print(f"[INFO] 필드 이름은 대소문자와 공백을 정확히 일치시켜야 합니다.")
             elif "validation" in error_msg.lower():
                 print(f"[INFO] 필드 타입이 올바르지 않을 수 있습니다.")
-                print(f"[INFO] Date는 Date 타입, Model은 Title/Rich Text/Select, 나머지는 Number 타입이어야 합니다.")
+                print(f"[INFO] Date는 Date 타입, Model은 Select 타입, Time은 Rich Text 타입, 나머지는 Number 타입이어야 합니다.")
+                print(f"[INFO] Model 필드가 Select 타입인지 확인하고, 모델 이름이 Select 옵션에 존재하는지 확인하세요.")
             
             return None
     
@@ -309,10 +346,10 @@ class NotionClient:
                 "Quantity": {
                     "number": quantity
                 },
-                "Cost": {
+                "Cost ($)": {
                     "number": cost
                 },
-                "Unit Price": {
+                "Unit Price ($)": {
                     "number": unit_price
                 }
             }
@@ -359,6 +396,7 @@ class NotionClient:
                 print(f"[DEBUG] 레코드 내용: {record}")
             date = record.get("date")
             model = record.get("model")
+            time = record.get("time")  # 시간 정보 추출 (시/분 단위일 때만 존재)
             requests = record.get("requests", 0)
             quantity = record.get("quantity", 0)
             cost = record.get("cost", 0.0)
@@ -372,8 +410,11 @@ class NotionClient:
             
             # 기존 페이지 확인
             if verbose:
-                print(f"[DEBUG] 기존 페이지 확인 중: date={date}, model={model}")
-            existing_page_id = self.find_existing_page(database_id, date, model)
+                if time:
+                    print(f"[DEBUG] 기존 페이지 확인 중: date={date}, model={model}, time={time}")
+                else:
+                    print(f"[DEBUG] 기존 페이지 확인 중: date={date}, model={model}")
+            existing_page_id = self.find_existing_page(database_id, date, model, time=time)
             
             if existing_page_id:
                 if verbose:
@@ -400,7 +441,7 @@ class NotionClient:
                     print(f"[DEBUG] 새 페이지 생성 시도 중...")
                 # 새로 생성
                 page_id = self.create_page(
-                    database_id, date, model, requests, quantity, cost, unit_price, verbose=verbose
+                    database_id, date, model, requests, quantity, cost, unit_price, time=time, verbose=verbose
                 )
                 if page_id:
                     if verbose:

@@ -3,6 +3,7 @@
 CLI 테이블 형식 출력
 """
 from typing import Dict, Any
+from datetime import datetime
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
@@ -24,12 +25,31 @@ def format_number(num: float) -> str:
 
 def print_period_info(meta: Dict[str, Any]):
     """조회 기간 정보 출력"""
-    start = meta.get("start", "")
-    end = meta.get("end", "")
+    start_str = meta.get("start", "")
+    end_str = meta.get("end", "")
     timezone = meta.get("timezone", "")
     timeframe = meta.get("timeframe")
     
-    info_text = f"조회 기간: {start} ~ {end}"
+    # ISO8601 형식을 일반 날짜 형식으로 변환
+    try:
+        if start_str:
+            start_dt = datetime.fromisoformat(start_str.replace('Z', '+00:00'))
+            start_display = start_dt.strftime("%Y-%m-%d %H:%M:%S")
+        else:
+            start_display = start_str
+    except (ValueError, AttributeError):
+        start_display = start_str
+    
+    try:
+        if end_str:
+            end_dt = datetime.fromisoformat(end_str.replace('Z', '+00:00'))
+            end_display = end_dt.strftime("%Y-%m-%d %H:%M:%S")
+        else:
+            end_display = end_str
+    except (ValueError, AttributeError):
+        end_display = end_str
+    
+    info_text = f"조회 기간: {start_display} ~ {end_display}"
     if timezone:
         info_text += f" | 타임존: {timezone}"
     if timeframe:

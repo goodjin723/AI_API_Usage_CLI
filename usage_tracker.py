@@ -3,7 +3,7 @@
 Usage API 데이터 처리 및 집계
 """
 from typing import Dict, Any, List, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 def parse_usage_data(usage_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -263,6 +263,43 @@ def format_for_notion(
     pricing_map = parse_pricing_data(pricing_data)
     parsed = parse_usage_data(usage_data)
     
+    # timeframe 확인 (시/분 단위인지 체크)
+    meta = parsed.get("meta", {})
+    timeframe = meta.get("timeframe")
+    
+    # timeframe이 명시되지 않았을 때 기간 길이로 자동 판단
+    if not timeframe:
+        start_str = meta.get("start")
+        end_str = meta.get("end")
+        
+        if start_str and end_str:
+            try:
+                # ISO8601 형식 파싱
+                start_dt = datetime.fromisoformat(start_str.replace('Z', '+00:00'))
+                end_dt = datetime.fromisoformat(end_str.replace('Z', '+00:00'))
+                
+                # 기간 길이 계산
+                duration = end_dt - start_dt
+                
+                # API 자동 선택 규칙:
+                # - 2시간 이내: minute
+                # - 2일 이내: hour
+                # - 그 이상: day 등
+                if duration <= timedelta(hours=2):
+                    timeframe = "minute"
+                elif duration <= timedelta(days=2):
+                    timeframe = "hour"
+                else:
+                    timeframe = "day"
+            except (ValueError, AttributeError):
+                # 파싱 실패 시 기본값으로 day 사용
+                timeframe = "day"
+        else:
+            # start/end 정보가 없으면 기본값으로 day 사용
+            timeframe = "day"
+    
+    include_time = timeframe in ["minute", "hour"]
+    
     # auth_method별로 데이터 그룹화
     notion_data_by_auth: Dict[str, List[Dict[str, Any]]] = {}
     
@@ -271,14 +308,33 @@ def format_for_notion(
         if not isinstance(bucket_entry, dict):
             continue
         
-        # bucket에서 날짜 추출
+        # bucket에서 날짜와 시간 추출
         bucket = bucket_entry.get("bucket", "")
         if isinstance(bucket, str):
-            # ISO8601 형식에서 날짜만 추출
             if "T" in bucket:
                 date = bucket.split("T")[0]
+                # 시/분 단위일 때만 시간 추출
+                if include_time:
+                    time_part = bucket.split("T")[1]
+                    # 타임존 제거 (예: "14:30:00-05:00" -> "14:30:00")
+                    if "+" in time_part:
+                        time_str = time_part.split("+")[0]
+                    elif "-" in time_part:
+                        # 타임존이 -05:00 형식인 경우 (마지막 - 기준으로 분리)
+                        # 예: "14:30:00-05:00" -> ["14:30:00", "05:00"]
+                        parts = time_part.rsplit("-", 1)
+                        if len(parts) == 2 and ":" in parts[1]:
+                            # parts[1]이 타임존 형식 (예: "05:00")
+                            time_str = parts[0]
+                        else:
+                            time_str = time_part.split("Z")[0] if "Z" in time_part else time_part
+                    else:
+                        time_str = time_part.split("Z")[0] if "Z" in time_part else time_part
+                else:
+                    time_str = None
             else:
                 date = bucket
+                time_str = None
         else:
             continue
         
@@ -316,7 +372,7 @@ def format_for_notion(
             if key_alias not in notion_data_by_auth:
                 notion_data_by_auth[key_alias] = []
             
-            notion_data_by_auth[key_alias].append({
+            record = {
                 "date": date,
                 "model": endpoint_id,
                 "requests": requests,
@@ -324,7 +380,13 @@ def format_for_notion(
                 "cost": cost,
                 "unit_price": unit_price,
                 "auth_method": key_alias
-            })
+            }
+            
+            # 시/분 단위일 때만 시간 정보 추가
+            if time_str:
+                record["time"] = time_str
+            
+            notion_data_by_auth[key_alias].append(record)
     
     return notion_data_by_auth
 

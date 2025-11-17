@@ -66,8 +66,8 @@ def parse_args() -> argparse.Namespace:
         "-timeframe",
         type=str,
         choices=["minute", "hour", "day", "week", "month"],
-        default=None,
-        help="집계 단위 (미지정 시 API가 자동 감지하여 날짜별 상세 데이터 반환)"
+        default="day",
+        help="집계 단위 (기본값: day)"
     )
     
     parser.add_argument(
@@ -611,8 +611,10 @@ def execute_query(
     try:
         if args.verbose:
             print(f"\n[INFO] 모델 목록: {', '.join(models)}")
-            start_str, end_str = date_utils.format_date_range_for_api(start, end)
-            print(f"[INFO] 조회 기간: {start_str} ~ {end_str}")
+            # 조회 기간을 일반 날짜 형식으로 출력
+            start_display = start.strftime("%Y-%m-%d %H:%M:%S")
+            end_display = end.strftime("%Y-%m-%d %H:%M:%S")
+            print(f"[INFO] 조회 기간: {start_display} ~ {end_display}")
         
         timezone = args.timezone or config.get_timezone()
         
@@ -763,8 +765,10 @@ def cli_mode(args: argparse.Namespace) -> None:
     start, end = parse_date_range(args)
     
     if args.verbose:
-        start_str, end_str = date_utils.format_date_range_for_api(start, end)
-        print(f"[INFO] 조회 기간: {start_str} ~ {end_str}")
+        # 조회 기간을 일반 날짜 형식으로 출력
+        start_display = start.strftime("%Y-%m-%d %H:%M:%S")
+        end_display = end.strftime("%Y-%m-%d %H:%M:%S")
+        print(f"[INFO] 조회 기간: {start_display} ~ {end_display}")
     
     # 조회 실행
     execute_query(args, api_key, models, start, end)

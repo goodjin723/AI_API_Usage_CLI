@@ -112,7 +112,7 @@ def get_preset_range(preset: str, tz: Optional[str] = None) -> Tuple[datetime, d
 
 def get_default_date_range(tz: Optional[str] = None) -> Tuple[datetime, datetime]:
     """
-    기본 날짜 범위 반환 (24시간 전부터 현재까지)
+    기본 날짜 범위 반환 (일주일 전부터 현재까지)
     
     Args:
         tz: 타임존 (기본값: config에서 가져옴)
@@ -125,7 +125,7 @@ def get_default_date_range(tz: Optional[str] = None) -> Tuple[datetime, datetime
     
     timezone_obj = ZoneInfo(tz) if tz else timezone.utc
     now = datetime.now(timezone_obj)
-    start = now - timedelta(hours=24)
+    start = (now - timedelta(days=7)).replace(hour=0, minute=0, second=0, microsecond=0)
     
     return start, now
 
@@ -163,7 +163,7 @@ def parse_date_range(
             timezone_obj = ZoneInfo(tz) if tz else timezone.utc
             end = datetime.now(timezone_obj)
     else:
-        # 둘 다 없으면 기본값 (24시간 전부터 현재까지)
+        # 둘 다 없으면 기본값 (일주일 전부터 현재까지)
         start, end = get_default_date_range(tz)
     
     # 종료 날짜가 시작 날짜보다 이전이면 에러
