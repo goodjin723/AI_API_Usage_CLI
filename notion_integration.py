@@ -231,6 +231,15 @@ class NotionClient:
                     }
                 },
                 "Model": {
+                    "title": [
+                        {
+                            "text": {
+                                "content": model
+                            }
+                        }
+                    ]
+                },
+                "Model List": {
                     "select": {
                         "name": model
                     }
@@ -268,7 +277,8 @@ class NotionClient:
                     print(f"  - Time: {time}")
                 else:
                     print(f"  - Date: {date_str} (날짜만)")
-                print(f"  - Model: {model} (select 타입)")
+                print(f"  - Model: {model} (title 타입)")
+                print(f"  - Model List: {model} (select 타입)")
                 print(f"  - Requests: {requests}")
                 print(f"  - Quantity: {quantity}")
                 print(f"  - Cost: {cost}")
@@ -308,12 +318,12 @@ class NotionClient:
             # 특정 에러 타입에 대한 안내
             if "property" in error_msg.lower() and "does not exist" in error_msg.lower():
                 print(f"[INFO] 필드 이름이 데이터베이스에 존재하지 않습니다.")
-                print(f"[INFO] 필수 필드: Date, Model, Requests, Quantity, Cost ($), Unit Price ($)")
+                print(f"[INFO] 필수 필드: Date, Model, Model List, Requests, Quantity, Cost ($), Unit Price ($)")
                 print(f"[INFO] 필드 이름은 대소문자와 공백을 정확히 일치시켜야 합니다.")
             elif "validation" in error_msg.lower():
                 print(f"[INFO] 필드 타입이 올바르지 않을 수 있습니다.")
-                print(f"[INFO] Date는 Date 타입, Model은 Select 타입, Time은 Rich Text 타입, 나머지는 Number 타입이어야 합니다.")
-                print(f"[INFO] Model 필드가 Select 타입인지 확인하고, 모델 이름이 Select 옵션에 존재하는지 확인하세요.")
+                print(f"[INFO] Date는 Date 타입, Model은 Title 타입, Model List는 Select 타입, Time은 Rich Text 타입, 나머지는 Number 타입이어야 합니다.")
+                print(f"[INFO] Model List 필드가 Select 타입인지 확인하고, 모델 이름이 Select 옵션에 존재하는지 확인하세요.")
             
             return None
     

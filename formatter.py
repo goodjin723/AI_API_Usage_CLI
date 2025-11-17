@@ -136,19 +136,16 @@ def print_auth_method_table(calculated_data: Dict[str, Any]):
 
 
 def format_for_display(
-    usage_data: Dict[str, Any],
-    pricing_data: Dict[str, Any]
+    usage_data: Dict[str, Any]
 ) -> None:
     """
     CLI 화면에 테이블 형식으로 출력
     
     Args:
         usage_data: Usage API 응답 데이터
-        pricing_data: Pricing API 응답 데이터
     """
-    # 가격 정보 파싱 및 비용 계산
-    pricing_map = usage_tracker.parse_pricing_data(pricing_data)
-    calculated_data = usage_tracker.calculate_costs(usage_data, pricing_map)
+    # 비용 계산 (Usage API의 unit_price 사용)
+    calculated_data = usage_tracker.calculate_costs(usage_data)
     
     # 출력
     console.print()

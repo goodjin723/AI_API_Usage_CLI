@@ -94,11 +94,10 @@ def parse_pricing_data(pricing_data: Dict[str, Any]) -> Dict[str, float]:
 
 
 def calculate_costs(
-    usage_data: Dict[str, Any],
-    pricing_map: Dict[str, float]
+    usage_data: Dict[str, Any]
 ) -> Dict[str, Any]:
     """
-    사용량 데이터와 가격 정보를 결합하여 비용 계산
+    사용량 데이터에서 비용 계산 (Usage API의 unit_price 사용)
     
     Returns:
         계산된 데이터 구조
@@ -132,8 +131,8 @@ def calculate_costs(
                 continue
             
             quantity = result.get("quantity", 0)
-            unit_price = result.get("unit_price") or pricing_map.get(endpoint_id, 0.0)
-            cost = result.get("cost", quantity * unit_price)
+            unit_price = result.get("unit_price", 0.0)
+            cost = result.get("cost", quantity * unit_price if unit_price else 0.0)
             
             # requests는 quantity와 동일하게 처리 (API에서 제공하지 않는 경우)
             requests = result.get("requests", quantity)
@@ -190,19 +189,21 @@ def calculate_costs(
             cost = item.get("cost", 0.0)
             requests = item.get("requests", item.get("count", quantity))
             
+            # unit_price 추출
+            unit_price = item.get("unit_price", 0.0)
+            
             # 모델별 집계
             if endpoint_id not in model_stats:
                 model_stats[endpoint_id] = {
                     "requests": 0,
                     "quantity": 0,
                     "cost": 0.0,
-                    "unit_price": pricing_map.get(endpoint_id, item.get("unit_price", 0.0))
+                    "unit_price": unit_price
                 }
             
             # cost가 이미 계산되어 있으면 사용, 없으면 계산
             if cost == 0.0:
-                unit_price = pricing_map.get(endpoint_id, item.get("unit_price", 0.0))
-                cost = quantity * unit_price
+                cost = quantity * unit_price if unit_price else 0.0
             
             model_stats[endpoint_id]["requests"] += requests
             model_stats[endpoint_id]["quantity"] += quantity
@@ -246,8 +247,7 @@ def calculate_costs(
 
 
 def format_for_notion(
-    usage_data: Dict[str, Any],
-    pricing_data: Dict[str, Any]
+    usage_data: Dict[str, Any]
 ) -> Dict[str, List[Dict[str, Any]]]:
     """
     Notion 저장용 데이터 변환
@@ -255,12 +255,10 @@ def format_for_notion(
     
     Args:
         usage_data: Usage API 응답 데이터
-        pricing_data: Pricing API 응답 데이터
     
     Returns:
         {auth_method: [일별 데이터 리스트]} 딕셔너리
     """
-    pricing_map = parse_pricing_data(pricing_data)
     parsed = parse_usage_data(usage_data)
     
     # timeframe 확인 (시/분 단위인지 체크)

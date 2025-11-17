@@ -503,7 +503,6 @@ def validate_and_execute_query(args: argparse.Namespace) -> None:
 
 def save_to_notion(
     usage_data: Dict[str, Any],
-    pricing_data: Dict[str, Any],
     cli_notion_api_key: Optional[str],
     dry_run: bool,
     verbose: bool
@@ -521,7 +520,7 @@ def save_to_notion(
         notion = notion_integration.NotionClient(notion_api_key)
         
         # 사용량 데이터를 Notion 형식으로 변환
-        notion_data_by_auth = usage_tracker.format_for_notion(usage_data, pricing_data)
+        notion_data_by_auth = usage_tracker.format_for_notion(usage_data)
         
         if not notion_data_by_auth:
             print("\n[INFO] 저장할 Notion 데이터가 없습니다.")
@@ -638,21 +637,12 @@ def execute_query(
         if args.verbose:
             print("[INFO] Usage API 호출 완료")
         
-        # Pricing API 호출
-        if args.verbose:
-            print("[INFO] Pricing API 호출 중...")
-        
-        pricing_data = client.get_pricing(endpoint_ids=models)
-        
-        if args.verbose:
-            print("[INFO] Pricing API 호출 완료")
-        
         # 테이블 형식 출력
-        formatter.format_for_display(usage_data, pricing_data)
+        formatter.format_for_display(usage_data)
         
         # Notion 저장
         if args.notion:
-            save_to_notion(usage_data, pricing_data, args.notion_api_key, args.dry_run, args.verbose)
+            save_to_notion(usage_data, args.notion_api_key, args.dry_run, args.verbose)
         
         if args.verbose:
             print("\n[SUCCESS] 작업 완료")
