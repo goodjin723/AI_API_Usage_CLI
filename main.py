@@ -661,17 +661,18 @@ def main():
         args = parse_args()
         
         # CLI 인자가 모두 비어있으면 인터랙티브 모드
+        # 기본값이 설정된 인자는 제외하고, 실제로 사용자가 명시한 인자만 체크
         has_cli_args = any([
             args.api_key,
             args.models,
             args.preset,
             args.start_date,
             args.end_date,
-            args.timeframe,
-            args.timezone,
+            args.timezone,  # 기본값이 None이므로 그대로 체크
             args.notion,
             args.verbose,
             args.dry_run
+            # args.timeframe과 args.bound_to_timeframe은 기본값이 있으므로 제외
         ])
         
         if not has_cli_args:
