@@ -33,7 +33,15 @@ def print_period_info(meta: Dict[str, Any]):
     # ISO8601 형식을 일반 날짜 형식으로 변환
     try:
         if start_str:
-            start_dt = datetime.fromisoformat(start_str.replace('Z', '+00:00'))
+            # Z를 +00:00으로 변환 (fromisoformat 호환성)
+            # 이미 타임존 정보가 포함된 경우 그대로 사용
+            if start_str.endswith('Z'):
+                start_str_parsed = start_str.replace('Z', '+00:00')
+            else:
+                start_str_parsed = start_str
+            start_dt = datetime.fromisoformat(start_str_parsed)
+            # 타임존 정보가 포함된 datetime 객체의 값 그대로 출력
+            # (이미 사용자 타임존으로 변환된 값이므로 그대로 출력)
             start_display = start_dt.strftime("%Y-%m-%d %H:%M:%S")
         else:
             start_display = start_str
@@ -42,7 +50,15 @@ def print_period_info(meta: Dict[str, Any]):
     
     try:
         if end_str:
-            end_dt = datetime.fromisoformat(end_str.replace('Z', '+00:00'))
+            # Z를 +00:00으로 변환 (fromisoformat 호환성)
+            # 이미 타임존 정보가 포함된 경우 그대로 사용
+            if end_str.endswith('Z'):
+                end_str_parsed = end_str.replace('Z', '+00:00')
+            else:
+                end_str_parsed = end_str
+            end_dt = datetime.fromisoformat(end_str_parsed)
+            # 타임존 정보가 포함된 datetime 객체의 값 그대로 출력
+            # (이미 사용자 타임존으로 변환된 값이므로 그대로 출력)
             end_display = end_dt.strftime("%Y-%m-%d %H:%M:%S")
         else:
             end_display = end_str

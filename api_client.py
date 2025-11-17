@@ -4,14 +4,86 @@ Usage API 호출 및 페이지네이션 처리
 """
 import requests  # type: ignore
 import time
-from typing import Optional, List, Dict, Any
-from datetime import datetime
+from typing import Optional, List, Dict, Any, Tuple
+from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 import date_utils
 import config
 
 
 BASE_URL = "https://api.fal.ai/v1/models"
 USAGE_ENDPOINT = f"{BASE_URL}/usage"
+
+
+def extract_date_range_from_time_series(
+    time_series: List[Dict[str, Any]], 
+    target_timezone: Optional[str] = None,
+    timeframe: Optional[str] = None,
+    bound_to_timeframe: bool = True
+) -> Tuple[Optional[str], Optional[str]]:
+    """
+    time_series 데이터에서 bucket 필드를 분석하여 실제 데이터가 있는 기간 추출
+    bucket의 실제 최소/최대 값을 그대로 사용하여 데이터 신뢰성 유지
+    bucket은 UTC 시간이므로 사용자 타임존으로 변환
+    
+    Args:
+        time_series: time_series 데이터 리스트 [{"bucket": "...", "results": [...]}, ...]
+        target_timezone: 변환할 타임존 (None이면 UTC 그대로)
+        timeframe: 집계 단위 (minute, hour, day, week, month) - 참고용
+        bound_to_timeframe: timeframe 경계 정렬 여부 - 참고용
+    
+    Returns:
+        (시작 날짜 ISO8601 문자열, 종료 날짜 ISO8601 문자열) 튜플
+        bucket이 없으면 (None, None) 반환
+    """
+    if not time_series or not isinstance(time_series, list):
+        return None, None
+    
+    buckets = []
+    for entry in time_series:
+        if not isinstance(entry, dict):
+            continue
+        bucket = entry.get("bucket")
+        if bucket and isinstance(bucket, str):
+            try:
+                # bucket을 datetime으로 파싱 (UTC로 가정)
+                # ISO8601 형식: "2024-01-01T00:00:00Z" 또는 "2024-01-01T00:00:00+00:00"
+                bucket_str = bucket.replace('Z', '+00:00')
+                dt = datetime.fromisoformat(bucket_str)
+                # UTC로 명시적으로 설정 (타임존 정보가 없으면 UTC로 가정)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                else:
+                    # 이미 타임존이 있으면 UTC로 변환
+                    dt = dt.astimezone(timezone.utc)
+                
+                # 사용자 타임존으로 변환
+                if target_timezone:
+                    try:
+                        target_tz = ZoneInfo(target_timezone)
+                        dt = dt.astimezone(target_tz)
+                    except Exception:
+                        # 타임존 변환 실패 시 UTC 그대로 사용
+                        pass
+                
+                buckets.append(dt)
+            except (ValueError, AttributeError):
+                # 파싱 실패 시 무시
+                continue
+    
+    if not buckets:
+        return None, None
+    
+    # 가장 오래된 날짜와 가장 최근 날짜 찾기
+    # bucket의 실제 값을 그대로 사용
+    min_bucket = min(buckets)
+    max_bucket = max(buckets)
+    
+    # ISO8601 형식으로 변환
+    min_str = min_bucket.isoformat()
+    max_str = max_bucket.isoformat()
+    
+    return min_str, max_str
 
 
 class FalAPIClient:
@@ -111,6 +183,21 @@ class FalAPIClient:
                 if i < len(endpoint_ids) - 1:
                     time.sleep(0.5)  # 0.5초 지연
             
+            # time_series에서 실제 조회 기간 추출 (bound_to_timeframe이 적용된 경우)
+            # bucket은 UTC이므로 사용자 타임존으로 변환
+            actual_start = start_str
+            actual_end = end_str
+            if all_time_series:
+                bucket_start, bucket_end = extract_date_range_from_time_series(
+                    all_time_series, 
+                    timezone, 
+                    timeframe, 
+                    bound_to_timeframe
+                )
+                if bucket_start and bucket_end:
+                    actual_start = bucket_start
+                    actual_end = bucket_end
+            
             # 최종 응답 구성
             result = {
                 "summary": all_summaries,
@@ -118,8 +205,8 @@ class FalAPIClient:
                 "next_cursor": None,
                 "has_more": False,
                 "_meta": {
-                    "start": start_str,
-                    "end": end_str,
+                    "start": actual_start,  # bucket에서 추출한 실제 조회 기간 사용
+                    "end": actual_end,      # bucket에서 추출한 실제 조회 기간 사용
                     "timezone": timezone,
                     "timeframe": timeframe,
                     "endpoint_ids": endpoint_ids,
@@ -257,12 +344,28 @@ class FalAPIClient:
                 "total_count": len(all_data)
             }
         
+        # time_series에서 실제 조회 기간 추출 (bound_to_timeframe이 적용된 경우)
+        # bucket은 UTC이므로 사용자 타임존으로 변환
+        actual_start = start_str
+        actual_end = end_str
+        time_series = result.get("time_series", [])
+        if time_series:
+            bucket_start, bucket_end = extract_date_range_from_time_series(
+                time_series, 
+                timezone, 
+                timeframe, 
+                bound_to_timeframe
+            )
+            if bucket_start and bucket_end:
+                actual_start = bucket_start
+                actual_end = bucket_end
+        
         # 메타데이터 추가/업데이트
         if "_meta" not in result:
             result["_meta"] = {}
         result["_meta"].update({
-            "start": start_str,
-            "end": end_str,
+            "start": actual_start,  # bucket에서 추출한 실제 조회 기간 사용
+            "end": actual_end,      # bucket에서 추출한 실제 조회 기간 사용
             "timezone": timezone,
             "timeframe": timeframe,
             "endpoint_ids": endpoint_ids,
@@ -303,4 +406,3 @@ class FalAPIClient:
             raise requests.exceptions.HTTPError(error_msg)
         
         return response.json()
-
