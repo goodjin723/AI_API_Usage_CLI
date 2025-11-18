@@ -1,9 +1,14 @@
 {
-  "timezone": "GMT",
+  "timezone": "Asia/Seoul",
   "default_date_range": {
-    "preset": "last-30-days"
+    "preset": "last-7-days"
   },
   "models": [
-    "fal-ai/nano-banana/edit"
-  ]
+    "fal-ai/veo3/image-to-video"
+  ],
+  "notion_api_key": "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",
+  "notion_databases": {
+    "pjVFT_FAL": "2abc5a12fc7b80b4a24cfeec7f3aa6d9"
+  },
+  "api_key": "d"
 }
