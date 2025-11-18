@@ -107,18 +107,24 @@ python main.py -api-key <your-fal-ai-admin-key>
 3. 데이터베이스 URL에서 ID 복사
     - URL 형식: `https://www.notion.so/{workspace}/{database_id}?v=...`
     - `database_id` 부분을 복사
-4. 데이터베이스 스키마 (이름 : 타입) &nbsp; **※ 이름(띄어쓰기 포함)과 타입 전부 동일해야 함.**
-    - Date : Full date
-    - Model : Title
-    - Requests : Number
-    - Quantity : Number
-    - Cost ($) : Number
-    - Unit Price ($) : Number
-    - Time : Text
-    - Model List : Select
-    
 
-### 3-1. 인터랙티브 메뉴에서 설정 (config.json 저장과 동일)
+### 3. 데이터베이스 구성
+아래 표와 동일하게 속성 생성 &nbsp; **※ 속성 이름(띄어쓰기 포함)과 타입이 정확히 일치해야 함.**
+
+| 속성 이름 | 타입 |
+|-----------|------|
+| Date | Full date |
+| Model | Title |
+| Requests | Number |
+| Quantity | Number |
+| Cost ($) | Number |
+| Unit Price ($) | Number |
+| Time | Text |
+| Model List | Select |
+
+또는, [🌱Notion 템플릿](https://four-zircon-001.notion.site/AI_API_Usage_CLI-Notion-DB-Template-2afc5a12fc7b80be8bd2d71257df6ab9?source=copy_link_)을 복제하여 사용
+
+### 4-1. 인터랙티브 메뉴에서 설정 (config.json 저장과 동일)
 
 ```bash
 python main.py
@@ -127,7 +133,7 @@ python main.py
 # '2. 데이터베이스 ID 추가/수정' → 키 별칭 및 데이터베이스 ID 입력
 ```
 
-### 3-2. CLI에서 설정 (1회성)
+### 4-2. CLI에서 설정 (1회성)
 
 ```bash
 python main.py -notion-api-key <your-notion-api-key> -notion-database-id <database_key_name>:<your-notion-database-id>
@@ -145,8 +151,9 @@ python main.py -notion-api-key <your-notion-api-key> -notion-database-id <databa
   python main.py
   ```
   
-  **메뉴 옵션:**
-  
+  **메뉴 옵션**
+  <img width="1404" height="240" alt="image" src="https://github.com/user-attachments/assets/3a1d1018-2876-49a5-b381-b914950ff1d3" />
+
   - `1. 모델 관리`: 추적할 모델 추가/삭제
   - `2. 날짜 범위 설정`: 조회 기간 설정
   - `3. API 키 설정`: fal.ai API 키 설정
