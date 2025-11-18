@@ -1,12 +1,15 @@
 {
-  "timezone": "GMT",
+  "timezone": "Asia/Seoul",
   "default_date_range": {
-    "preset": "last-30-days"
+    "preset": "last-7-days"
   },
   "models": [
-    "fal-ai/imagen4/preview/ultra",
-    "fal-ai/nano-banana"
-  ]
+    "fal-ai/nano-banana/edit",
+    "fal-ai/imagen4/preview/ultra"
+  ],
+  "api_key": "<YOUR FAL_AI_ADMIN_KEY>"
+  "notion_api_key": "<YOUR NOTION_API_KEY>",
+  "notion_databases": {
+    "<EXAMPLE-KEY-ALIAS>": "<YOUR NOTION_DATABASES_ID>"
+  }
 }
-
-

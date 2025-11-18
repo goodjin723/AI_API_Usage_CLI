@@ -6,12 +6,20 @@ import sys
 import json
 from typing import Optional, List, Dict, Any
 from datetime import datetime
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.prompt import Prompt
+from rich import box
 import api_client
 import config
 import date_utils
 import formatter
 import usage_tracker
 import notion_integration
+
+# Rich console 인스턴스
+console = Console()
 
 
 def parse_args() -> argparse.Namespace:
@@ -35,7 +43,6 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default=None,
         help="추적할 모델 목록 (쉼표 구분, 예: fal-ai/imagen4/preview/ultra,fal-ai/nano-banana). "
-             "첫 실행 시 필수, 이후 실행 시 생략 가능 (config.json에 저장된 목록 자동 사용)"
     )
     
     # 날짜 범위 설정 (상호 배타적)
@@ -115,7 +122,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "-dry-run",
         action="store_true",
-        help="실제 저장 없이 미리보기만 (Notion 저장 시)"
+        help="실제 저장 없이 미리보기만"
     )
     
     parser.add_argument(
@@ -166,132 +173,214 @@ def parse_date_range(args: argparse.Namespace) -> tuple[datetime, datetime]:
 
 def show_main_menu() -> int:
     """메인 메뉴 표시"""
-    print("\n" + "="*60)
-    print("fal.ai 사용량 추적 CLI")
-    print("="*60)
-    print("1. 모델 관리")
-    print("2. 날짜 범위 설정")
-    print("3. API 키 설정")
-    print("4. Notion 설정")
-    print("5. 조회 실행")
-    print("6. 종료")
-    print("="*60)
-    
+    console.print()
+
+    # 메뉴 테이블 생성
+    table = Table(show_header=False, box=None, padding=(0, 2))
+    table.add_column("번호", style="bold cyan", width=4)
+    table.add_column("메뉴", style="white")
+
+    table.add_row("1", "모델 관리")
+    table.add_row("2", "날짜 범위 설정")
+    table.add_row("3", "API 키 설정")
+    table.add_row("4", "Notion 설정 [dim](API 키, 데이터베이스)[/dim]")
+    table.add_row("5", "Notion 저장 옵션 [dim](저장, 업데이트)[/dim]")
+    table.add_row("6", "[bold green]조회 실행[/bold green]")
+    table.add_row("7", "[dim]종료[/dim]")
+
+    panel = Panel(
+        table,
+        title="[bold blue]🚀 fal.ai 사용량 추적 CLI[/bold blue]",
+        border_style="blue",
+        padding=(0, 1)
+    )
+    console.print(panel)
+
     while True:
         try:
-            choice = input("\n선택하세요 (1-6): ").strip()
-            if choice in ["1", "2", "3", "4", "5", "6"]:
-                return int(choice)
-            print("[ERROR] 1-6 사이의 숫자를 입력하세요.")
+            choice = Prompt.ask("\n[cyan]메뉴 선택[/cyan]", choices=["1", "2", "3", "4", "5", "6", "7"])
+            return int(choice)
         except KeyboardInterrupt:
-            print("\n\n프로그램을 종료합니다.")
+            console.print("\n[yellow]프로그램을 종료합니다.[/yellow]")
             sys.exit(0)
         except Exception:
-            print("[ERROR] 올바른 숫자를 입력하세요.")
+            console.print("[red]올바른 숫자를 입력하세요.[/red]")
 
 
 def show_model_menu() -> None:
     """모델 관리 메뉴"""
     while True:
         models = config.get_models()
-        print("\n" + "="*60)
-        print("모델 관리")
-        print("="*60)
+        console.print()
+        console.print("[bold cyan]📦 모델 관리[/bold cyan]")
+        console.print("[dim]" + "─" * 50 + "[/dim]")
+        console.print()
+
+        # 현재 모델 목록
         if models:
-            print("\n현재 모델 목록:")
+            status = f"[green]등록된 모델: {len(models)}개[/green]"
+            console.print(status)
+            console.print()
+
+            model_table = Table(show_header=True, box=box.SIMPLE, border_style="green")
+            model_table.add_column("번호", style="cyan", width=6)
+            model_table.add_column("모델 ID", style="white")
+
             for i, model in enumerate(models, 1):
-                print(f"  {i}. {model}")
+                model_table.add_row(str(i), model)
+
+            console.print(model_table)
         else:
-            print("\n등록된 모델이 없습니다.")
-        print("\n1. 모델 추가")
-        print("2. 모델 삭제")
-        print("3. 뒤로 가기")
-        print("="*60)
-        
+            console.print("[dim]등록된 모델이 없습니다.[/dim]")
+
+        console.print()
+
+        # 메뉴 옵션
+        menu_table = Table(show_header=False, box=None, padding=(0, 2))
+        menu_table.add_column("번호", style="bold cyan", width=4)
+        menu_table.add_column("메뉴", style="white")
+
+        menu_table.add_row("1", "모델 추가")
+        menu_table.add_row("2", "모델 삭제" if models else "[dim]모델 삭제[/dim]")
+        menu_table.add_row("3", "뒤로 가기")
+
+        console.print(menu_table)
+
         try:
-            choice = input("\n선택하세요 (1-3): ").strip()
+            choice = Prompt.ask("\n[cyan]선택[/cyan]", choices=["1", "2", "3"])
             if choice == "1":
                 add_model()
             elif choice == "2":
                 if models:
                     delete_model()
                 else:
-                    print("[INFO] 삭제할 모델이 없습니다.")
+                    console.print("[yellow]삭제할 모델이 없습니다.[/yellow]")
             elif choice == "3":
                 break
-            else:
-                print("[ERROR] 1-3 사이의 숫자를 입력하세요.")
         except KeyboardInterrupt:
             break
         except Exception as e:
-            print(f"[ERROR] {e}")
+            console.print(f"[red]오류: {e}[/red]")
 
 
 def add_model() -> None:
     """모델 추가"""
-    print("\n모델 추가")
-    print("예: fal-ai/imagen4/preview/ultra")
-    model_id = input("모델 ID를 입력하세요: ").strip()
-    
+    console.print()
+    console.print("[bold cyan]➕ 모델 추가[/bold cyan]")
+    console.print("[dim]" + "─" * 50 + "[/dim]")
+    console.print()
+    console.print("[dim]예: fal-ai/imagen4/preview/ultra[/dim]")
+
+    model_id = Prompt.ask("[cyan]모델 ID[/cyan]").strip()
+
     if not model_id:
-        print("[ERROR] 모델 ID를 입력해주세요.")
+        console.print("[red]모델 ID를 입력해주세요.[/red]")
         return
-    
+
     models = config.get_models()
     if model_id in models:
-        print(f"[INFO] '{model_id}'는 이미 등록되어 있습니다.")
+        console.print(f"[yellow]'{model_id}'는 이미 등록되어 있습니다.[/yellow]")
         return
-    
+
     models.append(model_id)
     config.save_models(models)
-    print(f"[SUCCESS] '{model_id}'가 추가되었습니다.")
+    console.print(f"[green]✓ '{model_id}'가 추가되었습니다.[/green]")
 
 
 def delete_model() -> None:
     """모델 삭제"""
     models = config.get_models()
     if not models:
-        print("[INFO] 삭제할 모델이 없습니다.")
+        console.print("[yellow]삭제할 모델이 없습니다.[/yellow]")
         return
-    
-    print("\n모델 삭제")
-    print("삭제할 모델 번호를 입력하세요:")
+
+    console.print()
+    console.print("[bold yellow]➖ 모델 삭제[/bold yellow]")
+    console.print("[dim]" + "─" * 50 + "[/dim]")
+    console.print()
+
+    # 모델 목록 표시
+    table = Table(show_header=True, box=box.SIMPLE, border_style="yellow")
+    table.add_column("번호", style="yellow", width=6)
+    table.add_column("모델 ID", style="white")
+
     for i, model in enumerate(models, 1):
-        print(f"  {i}. {model}")
-    
+        table.add_row(str(i), model)
+
+    console.print(table)
+
     try:
-        choice = int(input("\n번호: ").strip())
-        if 1 <= choice <= len(models):
-            deleted = models.pop(choice - 1)
-            config.save_models(models)
-            print(f"[SUCCESS] '{deleted}'가 삭제되었습니다.")
-        else:
-            print(f"[ERROR] 1-{len(models)} 사이의 숫자를 입력하세요.")
-    except ValueError:
-        print("[ERROR] 올바른 숫자를 입력하세요.")
+        choice = Prompt.ask("\n[yellow]삭제할 모델 번호[/yellow]", choices=[str(i) for i in range(1, len(models) + 1)])
+        deleted = models.pop(int(choice) - 1)
+        config.save_models(models)
+        console.print(f"[green]✓ '{deleted}'가 삭제되었습니다.[/green]")
     except Exception as e:
-        print(f"[ERROR] {e}")
+        console.print(f"[red]오류: {e}[/red]")
 
 
-def show_date_range_menu() -> Dict[str, Any]:
+def show_date_range_menu(args: argparse.Namespace) -> Dict[str, Any]:
     """날짜 범위 설정 메뉴"""
     date_settings = {
         "preset": None,
         "start_date": None,
         "end_date": None
     }
-    
+
     while True:
-        print("\n" + "="*60)
-        print("날짜 범위 설정")
-        print("="*60)
-        print("1. 프리셋 선택 (오늘, 어제, 최근 7일 등)")
-        print("2. 시작/종료 날짜 직접 입력")
-        print("3. 뒤로 가기")
-        print("="*60)
-        
+        console.print()
+        console.print("[bold magenta]📅 날짜 범위 설정[/bold magenta]")
+        console.print("[dim]" + "─" * 50 + "[/dim]")
+        console.print()
+
+        # 현재 설정 및 실제 날짜 범위 표시
         try:
-            choice = input("\n선택하세요 (1-3): ").strip()
+            start, end = parse_date_range(args)
+            start_display = start.strftime("%Y-%m-%d %H:%M:%S")
+            end_display = end.strftime("%Y-%m-%d %H:%M:%S")
+
+            # 현재 설정 정보
+            info_table = Table(show_header=False, box=None, padding=(0, 1))
+            info_table.add_column("항목", style="cyan", width=12)
+            info_table.add_column("값", style="white")
+
+            if args.preset:
+                preset_names = {
+                    "today": "오늘",
+                    "yesterday": "어제",
+                    "last-7-days": "최근 7일",
+                    "last-30-days": "최근 30일",
+                    "this-month": "이번 달"
+                }
+                preset_name = preset_names.get(args.preset, args.preset)
+                info_table.add_row("현재 설정", f"[green]{preset_name}[/green]")
+            elif args.start_date:
+                end_desc = args.end_date if args.end_date else "현재"
+                info_table.add_row("현재 설정", f"[green]{args.start_date} ~ {end_desc}[/green]")
+            else:
+                info_table.add_row("현재 설정", "[dim]기본값[/dim]")
+
+            info_table.add_row("실제 범위", f"[yellow]{start_display}[/yellow]\n[yellow]~ {end_display}[/yellow]")
+
+            console.print(info_table)
+
+        except Exception as e:
+            console.print(f"[red]오류: {e}[/red]")
+
+        console.print()
+
+        # 메뉴 옵션
+        menu_table = Table(show_header=False, box=None, padding=(0, 2))
+        menu_table.add_column("번호", style="bold cyan", width=4)
+        menu_table.add_column("메뉴", style="white")
+
+        menu_table.add_row("1", "프리셋 선택 [dim](오늘, 어제, 최근 7일 등)[/dim]")
+        menu_table.add_row("2", "시작/종료 날짜 직접 입력")
+        menu_table.add_row("3", "뒤로 가기")
+
+        console.print(menu_table)
+
+        try:
+            choice = Prompt.ask("\n[cyan]선택[/cyan]", choices=["1", "2", "3"])
             if choice == "1":
                 preset = select_preset()
                 if preset:
@@ -308,24 +397,32 @@ def show_date_range_menu() -> Dict[str, Any]:
                     return date_settings
             elif choice == "3":
                 return date_settings
-            else:
-                print("[ERROR] 1-3 사이의 숫자를 입력하세요.")
         except KeyboardInterrupt:
             return date_settings
         except Exception as e:
-            print(f"[ERROR] {e}")
+            console.print(f"[red]오류: {e}[/red]")
 
 
 def select_preset() -> Optional[str]:
     """프리셋 선택"""
-    print("\n프리셋 선택:")
-    print("1. 오늘 (today)")
-    print("2. 어제 (yesterday)")
-    print("3. 최근 7일 (last-7-days)")
-    print("4. 최근 30일 (last-30-days)")
-    print("5. 이번 달 (this-month)")
-    print("6. 취소")
-    
+    console.print()
+    console.print("[bold magenta]📅 프리셋 선택[/bold magenta]")
+    console.print("[dim]" + "─" * 50 + "[/dim]")
+    console.print()
+
+    table = Table(show_header=False, box=None, padding=(0, 2))
+    table.add_column("번호", style="bold cyan", width=4)
+    table.add_column("프리셋", style="white")
+
+    table.add_row("1", "오늘 (today)")
+    table.add_row("2", "어제 (yesterday)")
+    table.add_row("3", "최근 7일 (last-7-days)")
+    table.add_row("4", "최근 30일 (last-30-days)")
+    table.add_row("5", "이번 달 (this-month)")
+    table.add_row("6", "취소")
+
+    console.print(table)
+
     presets = {
         "1": "today",
         "2": "yesterday",
@@ -333,14 +430,13 @@ def select_preset() -> Optional[str]:
         "4": "last-30-days",
         "5": "this-month"
     }
-    
+
     try:
-        choice = input("\n선택하세요 (1-6): ").strip()
+        choice = Prompt.ask("\n[cyan]선택[/cyan]", choices=["1", "2", "3", "4", "5", "6"])
         if choice == "6":
             return None
-        if choice in presets:
-            return presets[choice]
-        print("[ERROR] 1-6 사이의 숫자를 입력하세요.")
+        return presets.get(choice)
+    except KeyboardInterrupt:
         return None
     except Exception:
         return None
@@ -348,135 +444,242 @@ def select_preset() -> Optional[str]:
 
 def input_custom_date_range() -> tuple[Optional[str], Optional[str]]:
     """사용자 정의 날짜 범위 입력"""
-    print("\n날짜 범위 입력 (YYYY-MM-DD 형식)")
-    start = input("시작 날짜: ").strip()
-    end = input("종료 날짜 (엔터 시 현재 날짜): ").strip()
-    
-    if not start:
-        print("[ERROR] 시작 날짜를 입력해주세요.")
+    console.print()
+    console.print("[bold magenta]📅 날짜 범위 직접 입력[/bold magenta]")
+    console.print("[dim]" + "─" * 50 + "[/dim]")
+    console.print()
+    console.print("[dim]형식: YYYY-MM-DD[/dim]")
+
+    try:
+        start = Prompt.ask("[cyan]시작 날짜[/cyan]").strip()
+        if not start:
+            console.print("[red]시작 날짜를 입력해주세요.[/red]")
+            return None, None
+
+        end = Prompt.ask("[cyan]종료 날짜 [dim](엔터 시 현재 날짜)[/dim][/cyan]", default="").strip()
+        return start, end if end else None
+    except KeyboardInterrupt:
         return None, None
-    
-    return start, end if end else None
+    except Exception:
+        return None, None
 
 
 def show_api_key_menu() -> None:
     """API 키 설정 메뉴"""
-    print("\n" + "="*60)
-    print("API 키 설정")
-    print("="*60)
-    
-    api_key = config.get_api_key()
-    if api_key:
-        # 마스킹 처리
-        masked_key = api_key[:8] + "..." + api_key[-4:] if len(api_key) > 12 else "***"
-        print(f"\n현재 API 키: {masked_key}")
-    else:
-        print("\n등록된 API 키가 없습니다.")
-    
-    print("\n1. API 키 입력/변경")
-    print("2. 뒤로 가기")
-    print("="*60)
-    
-    try:
-        choice = input("\n선택하세요 (1-2): ").strip()
-        if choice == "1":
-            api_key = input("\nfal.ai Admin API 키를 입력하세요: ").strip()
-            if api_key:
-                config.save_api_key(api_key)
-                print("[SUCCESS] API 키가 저장되었습니다.")
-            else:
-                print("[ERROR] API 키를 입력해주세요.")
-        elif choice != "2":
-            print("[ERROR] 1-2 사이의 숫자를 입력하세요.")
-    except KeyboardInterrupt:
-        pass
-    except Exception as e:
-        print(f"[ERROR] {e}")
+    while True:
+        console.print()
+        console.print("[bold green]🔑 API 키 설정[/bold green]")
+        console.print("[dim]" + "─" * 50 + "[/dim]")
+        console.print()
+
+        api_key = config.get_api_key()
+        if api_key:
+            # 마스킹 처리
+            masked_key = api_key[:8] + "..." + api_key[-4:] if len(api_key) > 12 else "***"
+            status = f"[green]{masked_key}[/green]"
+        else:
+            status = "[dim]등록된 API 키 없음[/dim]"
+
+        # 현재 설정 및 메뉴
+        info_table = Table(show_header=False, box=None, padding=(0, 1))
+        info_table.add_column("항목", style="cyan", width=12)
+        info_table.add_column("값", style="white")
+        info_table.add_row("현재 API 키", status)
+
+        console.print(info_table)
+        console.print()
+
+        # 메뉴 옵션
+        menu_table = Table(show_header=False, box=None, padding=(0, 2))
+        menu_table.add_column("번호", style="bold cyan", width=4)
+        menu_table.add_column("메뉴", style="white")
+        menu_table.add_row("1", "API 키 입력/변경")
+        menu_table.add_row("2", "뒤로 가기")
+
+        console.print(menu_table)
+
+        try:
+            choice = Prompt.ask("\n[cyan]선택[/cyan]", choices=["1", "2"])
+            if choice == "1":
+                console.print()
+                api_key = Prompt.ask("[cyan]fal.ai Admin API 키[/cyan]").strip()
+                if api_key:
+                    config.save_api_key(api_key)
+                    console.print("[green]✓ API 키가 저장되었습니다.[/green]")
+                else:
+                    console.print("[red]API 키를 입력해주세요.[/red]")
+            elif choice == "2":
+                break
+        except KeyboardInterrupt:
+            break
+        except Exception as e:
+            console.print(f"[red]오류: {e}[/red]")
+
+
+def show_notion_save_menu(args: argparse.Namespace) -> None:
+    """Notion 저장 옵션 메뉴"""
+    while True:
+        console.print()
+        console.print("[bold yellow]💾 Notion 저장 옵션[/bold yellow]")
+        console.print("[dim]" + "─" * 50 + "[/dim]")
+        console.print()
+
+        # 현재 모드 결정
+        if args.notion:
+            save_status = "[green]●[/green] 활성화"
+            mode_marker = ["  ", "[green]●[/green]"]
+        else:
+            save_status = "[dim]○[/dim] 비활성화"
+            mode_marker = ["[yellow]●[/yellow]", "  "]
+
+        update_status = "[green]업데이트[/green]" if args.update_existing else "[dim]스킵[/dim]"
+
+        # 현재 설정
+        status_table = Table(show_header=False, box=None, padding=(0, 1))
+        status_table.add_column("항목", style="cyan", width=16)
+        status_table.add_column("상태", style="white")
+
+        status_table.add_row("저장 모드", save_status)
+        status_table.add_row("중복 데이터 처리", update_status)
+
+        console.print(status_table)
+        console.print()
+
+        # 메뉴 옵션
+        menu_table = Table(show_header=False, box=None, padding=(0, 2))
+        menu_table.add_column("", width=3)
+        menu_table.add_column("번호", style="bold cyan", width=4)
+        menu_table.add_column("메뉴", style="white")
+
+        menu_table.add_row(mode_marker[0], "1", "비활성화 [dim](Notion에 저장하지 않음)[/dim]")
+        menu_table.add_row(mode_marker[1], "2", "활성화 [dim](Notion에 저장)[/dim]")
+        menu_table.add_row("", "", "")
+        menu_table.add_row("", "3", f"중복 데이터 업데이트 ON/OFF [dim](현재: {update_status})[/dim]")
+        menu_table.add_row("", "4", "뒤로 가기")
+
+        console.print(menu_table)
+
+        try:
+            choice = Prompt.ask("\n[cyan]선택[/cyan]", choices=["1", "2", "3", "4"])
+            if choice == "1":
+                args.notion = False
+                args.dry_run = False
+                console.print("[green]✓ Notion 저장이 비활성화되었습니다.[/green]")
+            elif choice == "2":
+                args.notion = True
+                args.dry_run = False
+                console.print("[green]✓ Notion 저장이 활성화되었습니다.[/green]")
+            elif choice == "3":
+                args.update_existing = not args.update_existing
+                status = "활성화" if args.update_existing else "비활성화"
+                console.print(f"[green]✓ 중복 데이터 업데이트가 {status}되었습니다.[/green]")
+            elif choice == "4":
+                break
+        except KeyboardInterrupt:
+            break
+        except Exception as e:
+            console.print(f"[red]오류: {e}[/red]")
 
 
 def show_notion_menu() -> None:
     """Notion 설정 메뉴"""
     while True:
-        print("\n" + "="*60)
-        print("Notion 설정")
-        print("="*60)
-        
+        console.print()
+        console.print("[bold blue]📝 Notion 설정[/bold blue]")
+        console.print("[dim]" + "─" * 50 + "[/dim]")
+        console.print()
+
         # Notion API 키 확인
         notion_api_key = config.get_notion_api_key()
         if notion_api_key:
             masked_key = notion_api_key[:8] + "..." + notion_api_key[-4:] if len(notion_api_key) > 12 else "***"
-            print(f"\n현재 Notion API 키: {masked_key}")
+            api_key_status = f"[green]{masked_key}[/green]"
         else:
-            print("\n등록된 Notion API 키가 없습니다.")
-        
+            api_key_status = "[dim]등록된 API 키 없음[/dim]"
+
         # 등록된 데이터베이스 목록
         databases = config.get_all_notion_databases()
+
+        # 현재 설정 정보
+        info_table = Table(show_header=False, box=None, padding=(0, 1))
+        info_table.add_column("항목", style="cyan", width=16)
+        info_table.add_column("값", style="white")
+        info_table.add_row("Notion API 키", api_key_status)
+
         if databases:
-            print("\n등록된 데이터베이스:")
-            for auth_method, db_id in databases.items():
-                masked_db_id = db_id[:8] + "..." + db_id[-4:] if len(db_id) > 12 else db_id
-                print(f"  - {auth_method}: {masked_db_id}")
+            db_list = "\n".join([f"[white]{auth}: {db_id[:8]}...{db_id[-4:]}[/white]"
+                                 for auth, db_id in databases.items()])
+            info_table.add_row("데이터베이스", db_list)
         else:
-            print("\n등록된 데이터베이스가 없습니다.")
-        
-        print("\n1. Notion API 키 입력/변경")
-        print("2. 데이터베이스 ID 추가/수정")
-        print("3. 데이터베이스 ID 삭제")
-        print("4. 뒤로 가기")
-        print("="*60)
-        
+            info_table.add_row("데이터베이스", "[dim]등록된 데이터베이스 없음[/dim]")
+
+        console.print(info_table)
+        console.print()
+
+        # 메뉴 옵션
+        menu_table = Table(show_header=False, box=None, padding=(0, 2))
+        menu_table.add_column("번호", style="bold cyan", width=4)
+        menu_table.add_column("메뉴", style="white")
+        menu_table.add_row("1", "Notion API 키 입력/변경")
+        menu_table.add_row("2", "데이터베이스 ID 추가/수정")
+        menu_table.add_row("3", "데이터베이스 ID 삭제" if databases else "[dim]데이터베이스 ID 삭제[/dim]")
+        menu_table.add_row("4", "뒤로 가기")
+
+        console.print(menu_table)
+
         try:
-            choice = input("\n선택하세요 (1-4): ").strip()
+            choice = Prompt.ask("\n[cyan]선택[/cyan]", choices=["1", "2", "3", "4"])
             if choice == "1":
-                notion_api_key = input("\nNotion API 키를 입력하세요: ").strip()
+                console.print()
+                notion_api_key = Prompt.ask("[cyan]Notion API 키[/cyan]").strip()
                 if notion_api_key:
                     try:
                         config.save_notion_api_key(notion_api_key)
-                        print("[SUCCESS] Notion API 키가 저장되었습니다.")
+                        console.print("[green]✓ Notion API 키가 저장되었습니다.[/green]")
                     except Exception as e:
-                        print(f"[ERROR] Notion API 키 저장 실패: {e}")
+                        console.print(f"[red]Notion API 키 저장 실패: {e}[/red]")
                 else:
-                    print("[ERROR] Notion API 키를 입력해주세요.")
+                    console.print("[red]Notion API 키를 입력해주세요.[/red]")
             elif choice == "2":
-                auth_method = input("\n키 별칭 (auth_method)을 입력하세요: ").strip()
+                console.print()
+                auth_method = Prompt.ask("[cyan]키 별칭 (auth_method)[/cyan]").strip()
                 if not auth_method:
-                    print("[ERROR] 키 별칭을 입력해주세요.")
+                    console.print("[red]키 별칭을 입력해주세요.[/red]")
                     continue
-                
-                database_id = input("Notion 데이터베이스 ID를 입력하세요: ").strip()
+
+                database_id = Prompt.ask("[cyan]Notion 데이터베이스 ID[/cyan]").strip()
                 if database_id:
                     config.save_notion_database_id(auth_method, database_id)
-                    print(f"[SUCCESS] '{auth_method}'의 데이터베이스 ID가 저장되었습니다.")
+                    console.print(f"[green]✓ '{auth_method}'의 데이터베이스 ID가 저장되었습니다.[/green]")
                 else:
-                    print("[ERROR] 데이터베이스 ID를 입력해주세요.")
+                    console.print("[red]데이터베이스 ID를 입력해주세요.[/red]")
             elif choice == "3":
                 databases = config.get_all_notion_databases()
                 if not databases:
-                    print("[INFO] 삭제할 데이터베이스가 없습니다.")
+                    console.print("[yellow]삭제할 데이터베이스가 없습니다.[/yellow]")
                     continue
-                
-                print("\n삭제할 데이터베이스의 키 별칭을 입력하세요:")
+
+                console.print()
+                console.print("[cyan]삭제할 데이터베이스의 키 별칭:[/cyan]")
                 for auth_method in databases.keys():
-                    print(f"  - {auth_method}")
-                
-                auth_method = input("\n키 별칭: ").strip()
-                if auth_method in databases:
-                    # config에서 제거
-                    config_data = config.get_config()
-                    if "notion_databases" in config_data:
-                        del config_data["notion_databases"][auth_method]
-                        config.save_config(config_data)
-                    print(f"[SUCCESS] '{auth_method}'의 데이터베이스 ID가 삭제되었습니다.")
-                else:
-                    print(f"[ERROR] '{auth_method}'를 찾을 수 없습니다.")
+                    console.print(f"  - [white]{auth_method}[/white]")
+
+                console.print()
+                auth_method = Prompt.ask("[yellow]키 별칭[/yellow]",
+                                        choices=list(databases.keys()))
+
+                # config에서 제거
+                config_data = config.get_config()
+                if "notion_databases" in config_data:
+                    del config_data["notion_databases"][auth_method]
+                    config.save_config(config_data)
+                console.print(f"[green]✓ '{auth_method}'의 데이터베이스 ID가 삭제되었습니다.[/green]")
             elif choice == "4":
                 break
-            else:
-                print("[ERROR] 1-4 사이의 숫자를 입력하세요.")
         except KeyboardInterrupt:
             break
         except Exception as e:
-            print(f"[ERROR] {e}")
+            console.print(f"[red]오류: {e}[/red]")
 
 
 def validate_and_execute_query(args: argparse.Namespace) -> None:
@@ -484,25 +687,25 @@ def validate_and_execute_query(args: argparse.Namespace) -> None:
     # API 키 확인
     api_key = config.get_api_key(args.api_key)
     if not api_key:
-        print("\n[ERROR] API 키가 설정되지 않았습니다.")
-        print("메뉴에서 '3. API 키 설정'을 선택하여 API 키를 설정해주세요.")
+        console.print("\n[red]API 키가 설정되지 않았습니다.[/red]")
+        console.print("[yellow]메뉴에서 '3. API 키 설정'을 선택하여 API 키를 설정해주세요.[/yellow]")
         return
-    
+
     # 모델 목록 확인
     models = get_models_from_args(args)
     if not models:
-        print("\n[ERROR] 모델 목록이 비어있습니다.")
-        print("메뉴에서 '1. 모델 관리'를 선택하여 모델을 추가해주세요.")
+        console.print("\n[red]모델 목록이 비어있습니다.[/red]")
+        console.print("[yellow]메뉴에서 '1. 모델 관리'를 선택하여 모델을 추가해주세요.[/yellow]")
         return
-    
+
     # 날짜 범위 확인
     try:
         start, end = parse_date_range(args)
     except Exception as e:
-        print(f"\n[ERROR] 날짜 범위 설정 오류: {e}")
-        print("메뉴에서 '2. 날짜 범위 설정'을 선택하여 날짜를 설정해주세요.")
+        console.print(f"\n[red]날짜 범위 설정 오류: {e}[/red]")
+        console.print("[yellow]메뉴에서 '2. 날짜 범위 설정'을 선택하여 날짜를 설정해주세요.[/yellow]")
         return
-    
+
     # 조회 실행
     execute_query(args, api_key, models, start, end)
 
@@ -519,92 +722,92 @@ def save_to_notion(
         # Notion API 키 확인
         notion_api_key = config.get_notion_api_key(cli_notion_api_key)
         if not notion_api_key:
-            print("\n[ERROR] Notion API 키가 설정되지 않았습니다.")
-            print("환경 변수 NOTION_API_KEY를 설정하거나 -notion-api-key 옵션을 사용하세요.")
+            console.print("\n[red]Notion API 키가 설정되지 않았습니다.[/red]")
+            console.print("[yellow]환경 변수 NOTION_API_KEY를 설정하거나 -notion-api-key 옵션을 사용하세요.[/yellow]")
             return
-        
+
         # Notion 클라이언트 생성
         notion = notion_integration.NotionClient(notion_api_key)
-        
+
         # 사용량 데이터를 Notion 형식으로 변환
         notion_data_by_auth = usage_tracker.format_for_notion(usage_data)
-        
+
         if not notion_data_by_auth:
-            print("\n[INFO] 저장할 Notion 데이터가 없습니다.")
+            console.print("\n[yellow]저장할 Notion 데이터가 없습니다.[/yellow]")
             return
-        
+
         if dry_run:
-            print("\n[DRY-RUN] Notion 저장 모드 (실제 저장 안 함)")
+            console.print("\n[yellow][DRY-RUN] Notion 저장 모드 (실제 저장 안 함)[/yellow]")
             for auth_method, records in notion_data_by_auth.items():
-                print(f"  - {auth_method}: {len(records)}개 레코드")
+                console.print(f"  - {auth_method}: {len(records)}개 레코드")
             return
-        
+
         # auth_method별로 데이터 저장
         total_created = 0
         total_updated = 0
         total_skipped = 0
-        
+
         if verbose:
-            print(f"\n[DEBUG] 변환된 데이터: {len(notion_data_by_auth)}개 auth_method")
+            console.print(f"\n[dim][DEBUG] 변환된 데이터: {len(notion_data_by_auth)}개 auth_method[/dim]")
             for auth_method, records in notion_data_by_auth.items():
-                print(f"  - {auth_method}: {len(records)}개 레코드")
-        
+                console.print(f"  - {auth_method}: {len(records)}개 레코드")
+
         for auth_method, records in notion_data_by_auth.items():
             if verbose:
-                print(f"\n[DEBUG] 처리 중인 auth_method: '{auth_method}' ({len(records)}개 레코드)")
-            
+                console.print(f"\n[dim][DEBUG] 처리 중인 auth_method: '{auth_method}' ({len(records)}개 레코드)[/dim]")
+
             # 해당 auth_method의 데이터베이스 ID 가져오기
             database_id = config.get_notion_database_id(auth_method)
-            
+
             # 데이터베이스 ID가 없으면 등록된 모든 데이터베이스 확인
             if not database_id:
                 all_databases = config.get_all_notion_databases()
-                
+
                 # 등록된 데이터베이스가 하나만 있으면 자동으로 사용
                 if len(all_databases) == 1:
                     database_id = list(all_databases.values())[0]
                     if verbose:
-                        print(f"[INFO] '{auth_method}'의 데이터베이스 ID가 없어서 유일한 데이터베이스를 사용합니다.")
+                        console.print(f"[yellow]'{auth_method}'의 데이터베이스 ID가 없어서 유일한 데이터베이스를 사용합니다.[/yellow]")
                 else:
                     if verbose:
-                        print(f"[WARNING] '{auth_method}'의 Notion 데이터베이스 ID가 설정되지 않았습니다.")
-                        print(f"          등록된 데이터베이스 키: {list(all_databases.keys())}")
-                        print(f"          {len(records)}개 레코드가 스킵되었습니다.")
-                        print(f"\n[INFO] 해결 방법:")
-                        print(f"          1. 인터랙티브 메뉴에서 '4. Notion 설정' > '2. 데이터베이스 ID 추가/수정' 선택")
-                        print(f"          2. 키 별칭에 '{auth_method}' 입력")
-                        print(f"          3. 해당 데이터베이스 ID 입력")
+                        console.print(f"[yellow][WARNING] '{auth_method}'의 Notion 데이터베이스 ID가 설정되지 않았습니다.[/yellow]")
+                        console.print(f"[dim]          등록된 데이터베이스 키: {list(all_databases.keys())}[/dim]")
+                        console.print(f"[dim]          {len(records)}개 레코드가 스킵되었습니다.[/dim]")
+                        console.print(f"\n[cyan]해결 방법:[/cyan]")
+                        console.print(f"[dim]          1. 인터랙티브 메뉴에서 '4. Notion 설정' > '2. 데이터베이스 ID 추가/수정' 선택[/dim]")
+                        console.print(f"[dim]          2. 키 별칭에 '{auth_method}' 입력[/dim]")
+                        console.print(f"[dim]          3. 해당 데이터베이스 ID 입력[/dim]")
                     total_skipped += len(records)
                     continue
-            
+
             # 데이터베이스 존재 여부 확인
             if verbose:
-                print(f"[DEBUG] 데이터베이스 ID 확인 중: {database_id}")
+                console.print(f"[dim][DEBUG] 데이터베이스 ID 확인 중: {database_id}[/dim]")
             if not notion.check_database_exists(database_id, verbose=verbose):
-                print(f"\n[ERROR] '{auth_method}'의 데이터베이스(ID: {database_id})를 찾을 수 없습니다.")
+                console.print(f"\n[red]'{auth_method}'의 데이터베이스(ID: {database_id})를 찾을 수 없습니다.[/red]")
                 total_skipped += len(records)
                 continue
-            
+
             # 데이터 저장
             if verbose:
-                print(f"\n[INFO] '{auth_method}' 데이터베이스에 저장 중... ({len(records)}개 레코드)")
+                console.print(f"\n[cyan]'{auth_method}' 데이터베이스에 저장 중... ({len(records)}개 레코드)[/cyan]")
             if update_existing:
-                print(f"[INFO] 중복 데이터 발견 시 업데이트 모드")
+                console.print(f"[yellow]중복 데이터 발견 시 업데이트 모드[/yellow]")
             else:
-                print(f"[INFO] 중복 데이터 발견 시 스킵 모드 (중복 방지)")
-            
+                console.print(f"[yellow]중복 데이터 발견 시 스킵 모드 (중복 방지)[/yellow]")
+
             stats = notion.save_usage_data(database_id, records, update_existing=update_existing, verbose=verbose)
             total_created += stats["created"]
             total_updated += stats["updated"]
             total_skipped += stats["skipped"]
-            
+
             if verbose:
-                print(f"[INFO] 생성: {stats['created']}, 업데이트: {stats['updated']}, 스킵: {stats['skipped']}")
-        
-        print(f"\n[SUCCESS] Notion 저장 완료 (생성: {total_created}, 업데이트: {total_updated}, 스킵: {total_skipped})")
-        
+                console.print(f"[green]생성: {stats['created']}, 업데이트: {stats['updated']}, 스킵: {stats['skipped']}[/green]")
+
+        console.print(f"\n[green]✓ Notion 저장 완료 (생성: {total_created}, 업데이트: {total_updated}, 스킵: {total_skipped})[/green]")
+
     except Exception as e:
-        print(f"\n[ERROR] Notion 저장 중 오류 발생: {e}")
+        console.print(f"\n[red]Notion 저장 중 오류 발생: {e}[/red]")
         if verbose:
             import traceback
             traceback.print_exc()
@@ -619,22 +822,26 @@ def execute_query(
 ) -> None:
     """실제 조회 실행"""
     try:
+        console.print()
+
+        # 1단계: 준비
+        console.print("[cyan]⏳ API 호출 준비 중...[/cyan]")
+
         if args.verbose:
-            print(f"\n[INFO] 모델 목록: {', '.join(models)}")
+            console.print(f"[dim]   모델 목록: {', '.join(models)}[/dim]")
             # 조회 기간을 일반 날짜 형식으로 출력
             start_display = start.strftime("%Y-%m-%d %H:%M:%S")
             end_display = end.strftime("%Y-%m-%d %H:%M:%S")
-            print(f"[INFO] 조회 기간: {start_display} ~ {end_display}")
-        
+            console.print(f"[dim]   조회 기간: {start_display} ~ {end_display}[/dim]")
+
         timezone = args.timezone or config.get_timezone()
-        
+
         # API 클라이언트 생성
         client = api_client.FalAPIClient(api_key)
-        
-        # Usage API 호출
-        if args.verbose:
-            print("[INFO] Usage API 호출 중...")
-        
+
+        # 2단계: Usage API 호출
+        console.print("[cyan]⏳ 사용량 데이터 조회 중...[/cyan]")
+
         usage_data = client.get_usage(
             endpoint_ids=models,
             start=start,
@@ -644,22 +851,26 @@ def execute_query(
             bound_to_timeframe=args.bound_to_timeframe,
             include_notion=args.notion
         )
-        
-        if args.verbose:
-            print("[INFO] Usage API 호출 완료")
-        
+
+        console.print("[green]✓ 데이터 조회 완료[/green]")
+
+        # 3단계: 데이터 처리 및 출력
+        console.print("[cyan]⏳ 데이터 처리 중...[/cyan]")
+
         # 테이블 형식 출력
         formatter.format_for_display(usage_data)
-        
-        # Notion 저장
+
+        # 4단계: Notion 저장
         if args.notion:
+            console.print()
+            console.print("[cyan]⏳ Notion에 저장 중...[/cyan]")
             save_to_notion(usage_data, args.notion_api_key, args.dry_run, args.verbose, args.update_existing)
-        
-        if args.verbose:
-            print("\n[SUCCESS] 작업 완료")
-            
+
+        console.print()
+        console.print("[green]✓ 모든 작업 완료[/green]")
+
     except Exception as e:
-        print(f"\n[ERROR] 조회 중 오류 발생: {e}")
+        console.print(f"\n[red]❌ 조회 중 오류 발생: {e}[/red]")
         if args.verbose:
             import traceback
             traceback.print_exc()
@@ -670,7 +881,7 @@ def main():
     try:
         # 인자 파싱
         args = parse_args()
-        
+
         # CLI 인자가 모두 비어있으면 인터랙티브 모드
         # 기본값이 설정된 인자는 제외하고, 실제로 사용자가 명시한 인자만 체크
         has_cli_args = any([
@@ -685,22 +896,22 @@ def main():
             args.dry_run
             # args.timeframe과 args.bound_to_timeframe은 기본값이 있으므로 제외
         ])
-        
+
         if not has_cli_args:
             # 인터랙티브 모드
             interactive_mode(args)
         else:
             # CLI 모드 (기존 동작)
             cli_mode(args)
-        
+
     except KeyboardInterrupt:
-        print("\n\n프로그램을 종료합니다.")
+        console.print("\n\n[yellow]프로그램을 종료합니다.[/yellow]")
         sys.exit(0)
     except ValueError as e:
-        print(f"[ERROR] {e}", file=sys.stderr)
+        console.print(f"[red]{e}[/red]", file=sys.stderr)
         sys.exit(1)
     except Exception as e:
-        print(f"[ERROR] 예상치 못한 오류: {e}", file=sys.stderr)
+        console.print(f"[red]예상치 못한 오류: {e}[/red]", file=sys.stderr)
         if 'args' in locals() and args.verbose:
             import traceback
             traceback.print_exc()
@@ -710,14 +921,14 @@ def main():
 def interactive_mode(args: argparse.Namespace) -> None:
     """인터랙티브 모드"""
     date_settings = {}
-    
+
     while True:
         choice = show_main_menu()
-        
+
         if choice == 1:
             show_model_menu()
         elif choice == 2:
-            date_settings = show_date_range_menu()
+            date_settings = show_date_range_menu(args)
             # args에 반영
             if date_settings.get("preset"):
                 args.preset = date_settings["preset"]
@@ -732,10 +943,12 @@ def interactive_mode(args: argparse.Namespace) -> None:
         elif choice == 4:
             show_notion_menu()
         elif choice == 5:
-            validate_and_execute_query(args)
-            input("\n계속하려면 엔터를 누르세요...")
+            show_notion_save_menu(args)
         elif choice == 6:
-            print("\n프로그램을 종료합니다.")
+            validate_and_execute_query(args)
+            Prompt.ask("\n[dim]계속하려면 엔터를 누르세요[/dim]", default="")
+        elif choice == 7:
+            console.print("\n[yellow]프로그램을 종료합니다.[/yellow]")
             break
 
 
@@ -748,7 +961,7 @@ def cli_mode(args: argparse.Namespace) -> None:
             "fal.ai Admin API 키가 필요합니다. "
             "환경 변수 FAL_ADMIN_API_KEY를 설정하거나 -api-key 옵션을 사용하세요."
         )
-    
+
     # 모델 목록 가져오기
     models = get_models_from_args(args)
     if not models:
@@ -757,21 +970,21 @@ def cli_mode(args: argparse.Namespace) -> None:
             "-models 옵션으로 모델 목록을 지정해주세요. "
             "예: -models fal-ai/imagen4/preview/ultra,fal-ai/nano-banana"
         )
-    
+
     if args.verbose:
-        print(f"[INFO] 모델 목록: {', '.join(models)}")
+        console.print(f"[dim]모델 목록: {', '.join(models)}[/dim]")
         if args.models:
-            print(f"[INFO] 모델 목록이 config.json에 저장되었습니다.")
-    
+            console.print(f"[dim]모델 목록이 config.json에 저장되었습니다.[/dim]")
+
     # 날짜 범위 파싱
     start, end = parse_date_range(args)
-    
+
     if args.verbose:
         # 조회 기간을 일반 날짜 형식으로 출력
         start_display = start.strftime("%Y-%m-%d %H:%M:%S")
         end_display = end.strftime("%Y-%m-%d %H:%M:%S")
-        print(f"[INFO] 조회 기간: {start_display} ~ {end_display}")
-    
+        console.print(f"[dim]조회 기간: {start_display} ~ {end_display}[/dim]")
+
     # 조회 실행
     execute_query(args, api_key, models, start, end)
 
