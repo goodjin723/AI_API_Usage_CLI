@@ -1,0 +1,15 @@
+{
+  "timezone": "Asia/Seoul",
+  "default_date_range": {
+    "preset": "last-7-days"
+  },
+  "models": [
+    "fal-ai/your-model-id-1",
+    "fal-ai/your-model-id-2"
+  ],
+  "notion_api_key": "ntn_YOUR_NOTION_API_KEY_HERE",
+  "notion_databases": {
+    "database_key_1": "YOUR_NOTION_DATABASE_ID_1",
+    "database_key_2": "YOUR_NOTION_DATABASE_ID_2"
+  }
+}
