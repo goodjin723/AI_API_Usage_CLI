@@ -88,12 +88,34 @@ def validate_and_execute_query(args) -> None:
 def save_to_notion(
     usage_data: Dict[str, Any],
     cli_notion_api_key: Optional[str],
+    cli_notion_database_id: Optional[str],
     dry_run: bool,
     verbose: bool,
     update_existing: bool = False
 ) -> None:
     """Notion에 데이터 저장"""
     try:
+        # CLI 인자로 전달된 database_id를 파싱
+        cli_database_map = {}
+        if cli_notion_database_id:
+            # 쉼표로 구분된 여러 개의 "키:값" 쌍 파싱
+            if "," in cli_notion_database_id:
+                for pair in cli_notion_database_id.split(","):
+                    pair = pair.strip()
+                    if ":" in pair:
+                        key, db_id = pair.split(":", 1)
+                        cli_database_map[key.strip()] = db_id.strip()
+            # 단일 "키:값" 또는 UUID만 있는 경우
+            elif ":" in cli_notion_database_id:
+                key, db_id = cli_notion_database_id.split(":", 1)
+                cli_database_map[key.strip()] = db_id.strip()
+            else:
+                # UUID만 있는 경우 (모든 auth_method에 적용)
+                cli_database_map["__all__"] = cli_notion_database_id.strip()
+
+        if verbose and cli_database_map:
+            console.print(f"\n[dim][DEBUG] CLI 데이터베이스 맵: {cli_database_map}[/dim]")
+
         # Notion API 키 확인
         notion_api_key = config.get_notion_api_key(cli_notion_api_key)
         if not notion_api_key:
@@ -131,8 +153,19 @@ def save_to_notion(
             if verbose:
                 console.print(f"\n[dim][DEBUG] 처리 중인 auth_method: '{auth_method}' ({len(records)}개 레코드)[/dim]")
 
-            # 해당 auth_method의 데이터베이스 ID 가져오기
-            database_id = config.get_notion_database_id(auth_method)
+            # 데이터베이스 ID 가져오기 (우선순위: CLI 맵 > CLI 공통 > config.json)
+            database_id = None
+            if cli_database_map:
+                # 1. 해당 auth_method의 database_id가 CLI 맵에 있는지 확인
+                if auth_method in cli_database_map:
+                    database_id = cli_database_map[auth_method]
+                # 2. "__all__" 키가 있으면 모든 auth_method에 적용
+                elif "__all__" in cli_database_map:
+                    database_id = cli_database_map["__all__"]
+
+            # 3. CLI에 없으면 config.json에서 가져오기
+            if not database_id:
+                database_id = config.get_notion_database_id(auth_method)
 
             # 데이터베이스 ID가 없으면 등록된 모든 데이터베이스 확인
             if not database_id:
@@ -239,7 +272,7 @@ def execute_query(
         if args.notion:
             console.print()
             console.print("[cyan]⏳ Notion에 저장 중...[/cyan]")
-            save_to_notion(usage_data, args.notion_api_key, args.dry_run, args.verbose, args.update_existing)
+            save_to_notion(usage_data, args.notion_api_key, args.notion_database_id, args.dry_run, args.verbose, args.update_existing)
 
         console.print()
         console.print("[green]✓ 모든 작업 완료[/green]")
