@@ -109,7 +109,7 @@ python main.py -api-key <your-fal-ai-admin-key>
     - `database_id` 부분을 복사
 
 ### 3. 데이터베이스 구성
-아래 표와 동일하게 속성 생성 &nbsp; **※ 속성 이름(띄어쓰기 포함)과 타입이 정확히 일치해야 함.**
+1. 아래 표와 동일하게 속성 생성 &nbsp; **※ 속성 이름(띄어쓰기 포함)과 타입이 정확히 일치해야 함.**
 
 | 속성 이름 | 타입 |
 |-----------|------|
@@ -122,7 +122,8 @@ python main.py -api-key <your-fal-ai-admin-key>
 | Time | Text |
 | Model List | Select |
 
-또는, [🌱Notion 템플릿](https://four-zircon-001.notion.site/AI_API_Usage_CLI-Notion-DB-Template-2afc5a12fc7b80be8bd2d71257df6ab9?source=copy_link_)을 복제하여 사용
+2. 또는, [🌱Notion 템플릿](https://four-zircon-001.notion.site/AI_API_Usage_CLI-Notion-DB-Template-2afc5a12fc7b80be8bd2d71257df6ab9?source=copy_link_)을 복제하여 사용
+3. Model List 속성에는 사용량을 추적할 모델 리스트를 옵션 별로 미리 생성
 
 ### 4-1. 인터랙티브 메뉴에서 설정 (config.json 저장과 동일)
 
