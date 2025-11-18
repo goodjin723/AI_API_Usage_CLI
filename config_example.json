@@ -11,5 +11,6 @@
   "notion_databases": {
     "database_key_1": "YOUR_NOTION_DATABASE_ID_1",
     "database_key_2": "YOUR_NOTION_DATABASE_ID_2"
-  }
+  },
+  "api_key": "YOUR_FAL_AI_ADMIN_API_KEY_HERE"
 }
