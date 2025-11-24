@@ -115,4 +115,39 @@ def parse_args() -> argparse.Namespace:
         help="Notion에 중복 데이터가 있으면 업데이트 (기본값: 중복 시 스킵)"
     )
 
+    # Invoice 수집 옵션
+    parser.add_argument(
+        "-invoice",
+        action="store_true",
+        help="Invoice 수집 모드 활성화"
+    )
+
+    parser.add_argument(
+        "-invoice-keywords",
+        type=str,
+        default=None,
+        help="Invoice 검색 키워드 (쉼표 구분, 예: stripe,paypal,aws). config.json에서도 설정 가능"
+    )
+
+    parser.add_argument(
+        "-invoice-start-date",
+        type=str,
+        default=None,
+        help="Invoice 검색 시작 날짜 (YYYY-MM-DD 형식)"
+    )
+
+    parser.add_argument(
+        "-invoice-end-date",
+        type=str,
+        default=None,
+        help="Invoice 검색 종료 날짜 (YYYY-MM-DD 형식)"
+    )
+
+    parser.add_argument(
+        "-invoice-days",
+        type=int,
+        default=90,
+        help="Invoice 검색 기간 (최근 N일, 기본값: 90)"
+    )
+
     return parser.parse_args()

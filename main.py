@@ -7,6 +7,7 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 from rich.console import Console
 from rich.prompt import Prompt
+import questionary
 import api_client
 import config
 import date_utils
@@ -227,50 +228,46 @@ def execute_query(
         console.print()
 
         # 1단계: 준비
-        console.print("[cyan]⏳ API 호출 준비 중...[/cyan]")
+        console.print()
+        with console.status("[bold cyan]API 호출 준비 중...[/bold cyan]", spinner="dots"):
+            if args.verbose:
+                console.print(f"[dim]   모델 목록: {', '.join(models)}[/dim]")
+                start_display = start.strftime("%Y-%m-%d %H:%M:%S")
+                end_display = end.strftime("%Y-%m-%d %H:%M:%S")
+                console.print(f"[dim]   조회 기간: {start_display} ~ {end_display}[/dim]")
 
-        if args.verbose:
-            console.print(f"[dim]   모델 목록: {', '.join(models)}[/dim]")
-            # 조회 기간을 일반 날짜 형식으로 출력
-            start_display = start.strftime("%Y-%m-%d %H:%M:%S")
-            end_display = end.strftime("%Y-%m-%d %H:%M:%S")
-            console.print(f"[dim]   조회 기간: {start_display} ~ {end_display}[/dim]")
+            timezone = args.timezone or config.get_timezone()
 
-        timezone = args.timezone or config.get_timezone()
+            # API 클라이언트 생성
+            client = api_client.FalAPIClient(api_key)
 
-        # API 클라이언트 생성
-        client = api_client.FalAPIClient(api_key)
+            # 2단계: Usage API 호출
+            console.print("[dim]사용량 데이터 조회 중...[/dim]")
 
-        # 2단계: Usage API 호출
-        console.print("[cyan]⏳ 사용량 데이터 조회 중...[/cyan]")
-
-        usage_data = client.get_usage(
-            endpoint_ids=models,
-            start=start,
-            end=end,
-            timeframe=args.timeframe,
-            timezone=timezone,
-            bound_to_timeframe=args.bound_to_timeframe,
-            include_notion=False
-        )
+            usage_data = client.get_usage(
+                endpoint_ids=models,
+                start=start,
+                end=end,
+                timeframe=args.timeframe,
+                timezone=timezone,
+                bound_to_timeframe=args.bound_to_timeframe,
+                include_notion=False
+            )
 
         console.print("[green]✓ 데이터 조회 완료[/green]")
 
         # 3단계: 데이터 처리 및 출력
-        console.print("[cyan]⏳ 데이터 처리 중...[/cyan]")
-
-        # 테이블 형식 출력
         formatter.format_for_display(usage_data)
 
         # 4단계: Notion 저장 확인
         console.print()
-        save_choice = Prompt.ask(
-            "[cyan]Notion에 저장하시겠습니까?[/cyan]",
-            choices=["y", "n"],
-            default="y"
-        )
+        save_choice = questionary.confirm(
+            "Notion에 저장하시겠습니까?",
+            default=True,
+            style=cli_menus.custom_style
+        ).ask()
 
-        if save_choice.lower() == "y":
+        if save_choice:
             # Notion API 키 확인
             notion_api_key = config.get_notion_api_key(args.notion_api_key)
             if not notion_api_key:
@@ -286,14 +283,14 @@ def execute_query(
                 return
 
             # 중복 업데이트 옵션
-            update_existing = Prompt.ask(
-                "[cyan]중복된 데이터를 업데이트하시겠습니까?[/cyan]",
-                choices=["y", "n"],
-                default="n"
-            ).lower() == "y"
+            update_existing = questionary.confirm(
+                "중복된 데이터를 업데이트하시겠습니까?",
+                default=False,
+                style=cli_menus.custom_style
+            ).ask()
 
-            console.print("[cyan]⏳ Notion에 저장 중...[/cyan]")
-            save_to_notion(usage_data, args.notion_api_key, None, args.dry_run, args.verbose, update_existing)
+            with console.status("[bold cyan]Notion에 저장 중...[/bold cyan]", spinner="dots"):
+                save_to_notion(usage_data, args.notion_api_key, None, args.dry_run, args.verbose, update_existing)
         else:
             console.print("[yellow]저장을 취소했습니다.[/yellow]")
 
@@ -324,8 +321,12 @@ def main():
             args.timezone,  # 기본값이 None이므로 그대로 체크
             args.notion,
             args.verbose,
-            args.dry_run
-            # args.timeframe과 args.bound_to_timeframe은 기본값이 있으므로 제외
+            args.dry_run,
+            args.invoice,  # Invoice 모드
+            args.invoice_keywords,
+            args.invoice_start_date,
+            args.invoice_end_date
+            # args.timeframe, args.bound_to_timeframe, args.invoice_days는 기본값이 있으므로 제외
         ])
 
         if not has_cli_args:
@@ -366,13 +367,13 @@ def interactive_mode(args) -> None:
             fal_result = cli_menus.show_fal_ai_menu(args)
             if fal_result and fal_result.get("action") == "query":
                 validate_and_execute_query(args)
-                Prompt.ask("\n[dim]계속하려면 엔터를 누르세요[/dim]", default="")
+                questionary.press_any_key_to_continue("계속하려면 아무 키나 누르세요...", style=cli_menus.custom_style).ask()
         elif choice == 3:
             # invoices 수집
             invoice_result = cli_menus.show_invoice_menu()
             if invoice_result and invoice_result.get("action") == "fetch":
                 execute_invoice_query(invoice_result, args)
-                Prompt.ask("\n[dim]계속하려면 엔터를 누르세요[/dim]", default="")
+                questionary.press_any_key_to_continue("계속하려면 아무 키나 누르세요...", style=cli_menus.custom_style).ask()
 
 
 def execute_invoice_query(invoice_settings: Dict[str, Any], args) -> None:
@@ -395,16 +396,16 @@ def execute_invoice_query(invoice_settings: Dict[str, Any], args) -> None:
                 console.print(f"[dim]   검색 기간: 최근 {days}일[/dim]")
         
         # Invoice 조회
-        console.print("[cyan]⏳ Gmail에서 Invoice 검색 중...[/cyan]")
-        
-        invoices = invoice_gmail_client.fetch_invoices(
-            search_keywords=None,  # config에서 가져옴
-            model="gpt-4o-mini",
-            start_date=start_date,
-            end_date=end_date,
-            days=days,
-            verbose=args.verbose
-        )
+        console.print()
+        with console.status("[bold cyan]Gmail에서 Invoice 검색 중...[/bold cyan]", spinner="dots"):
+            invoices = invoice_gmail_client.fetch_invoices(
+                search_keywords=None,  # config에서 가져옴
+                model="gpt-4o-mini",
+                start_date=start_date,
+                end_date=end_date,
+                days=days,
+                verbose=args.verbose
+            )
         
         if not invoices:
             console.print("[yellow]⚠ 검색된 Invoice가 없습니다.[/yellow]")
@@ -417,13 +418,13 @@ def execute_invoice_query(invoice_settings: Dict[str, Any], args) -> None:
 
         # Notion 저장 확인
         console.print()
-        save_choice = Prompt.ask(
-            "[cyan]Notion에 저장하시겠습니까?[/cyan]",
-            choices=["y", "n"],
-            default="y"
-        )
+        save_choice = questionary.confirm(
+            "Notion에 저장하시겠습니까?",
+            default=True,
+            style=cli_menus.custom_style
+        ).ask()
         
-        if save_choice.lower() == "y":
+        if save_choice:
             # Notion API 키 확인
             notion_api_key = config.get_notion_api_key()
             if not notion_api_key:
@@ -440,23 +441,22 @@ def execute_invoice_query(invoice_settings: Dict[str, Any], args) -> None:
                 return
             
             # Notion에 저장
-            console.print("[cyan]⏳ Notion에 저장 중...[/cyan]")
-            
             notion = notion_integration.NotionClient(notion_api_key)
             
             # 중복 업데이트 옵션
-            update_existing = Prompt.ask(
-                "[cyan]중복된 Invoice를 업데이트하시겠습니까?[/cyan]",
-                choices=["y", "n"],
-                default="n"
-            ).lower() == "y"
-            
-            stats = notion.save_invoices(
-                database_id=invoice_db_id,
-                invoices=invoices,
-                update_existing=update_existing,
-                verbose=args.verbose
-            )
+            update_existing = questionary.confirm(
+                "중복된 Invoice를 업데이트하시겠습니까?",
+                default=False,
+                style=cli_menus.custom_style
+            ).ask()
+
+            with console.status("[bold cyan]Notion에 저장 중...[/bold cyan]", spinner="dots"):
+                stats = notion.save_invoices(
+                    database_id=invoice_db_id,
+                    invoices=invoices,
+                    update_existing=update_existing,
+                    verbose=args.verbose
+                )
             
             console.print(f"\n[green]✓ Notion 저장 완료 (생성: {stats['created']}, 업데이트: {stats['updated']}, 스킵: {stats['skipped']})[/green]")
         else:
@@ -471,6 +471,16 @@ def execute_invoice_query(invoice_settings: Dict[str, Any], args) -> None:
 
 def cli_mode(args) -> None:
     """CLI 모드 (기존 동작)"""
+    if args.invoice:
+        # Invoice 수집 모드
+        cli_invoice_mode(args)
+    else:
+        # fal.ai 사용량 추적 모드 (기존 동작)
+        cli_fal_ai_mode(args)
+
+
+def cli_fal_ai_mode(args) -> None:
+    """CLI 모드 - fal.ai 사용량 추적"""
     # API 키 가져오기
     api_key = config.get_api_key(args.api_key)
     if not api_key:
@@ -504,6 +514,81 @@ def cli_mode(args) -> None:
 
     # 조회 실행
     execute_query(args, api_key, models, start, end)
+
+
+def cli_invoice_mode(args) -> None:
+    """CLI 모드 - Invoice 수집"""
+    import invoice_gmail_client
+
+    # 키워드 가져오기 (CLI 인자 또는 config.json)
+    keywords = None
+    if args.invoice_keywords:
+        keywords = [k.strip() for k in args.invoice_keywords.split(",") if k.strip()]
+        if args.verbose:
+            console.print(f"[dim]검색 키워드: {', '.join(keywords)}[/dim]")
+
+    # 날짜 범위 설정
+    start_date = args.invoice_start_date
+    end_date = args.invoice_end_date
+    days = args.invoice_days
+
+    if args.verbose:
+        if start_date:
+            console.print(f"[dim]검색 기간: {start_date} ~ {end_date or '현재'}[/dim]")
+        else:
+            console.print(f"[dim]검색 기간: 최근 {days}일[/dim]")
+
+    # Invoice 조회
+    console.print()
+    with console.status("[bold cyan]Gmail에서 Invoice 검색 중...[/bold cyan]", spinner="dots"):
+        invoices = invoice_gmail_client.fetch_invoices(
+            search_keywords=keywords,
+            model="gpt-4o-mini",
+            start_date=start_date,
+            end_date=end_date,
+            days=days,
+            verbose=args.verbose
+        )
+
+    if not invoices:
+        console.print("[yellow]검색된 Invoice가 없습니다.[/yellow]")
+        return
+
+    console.print(f"[green]✓ {len(invoices)}개 Invoice 발견[/green]")
+
+    # 테이블 형식으로 결과 표시
+    formatter.format_invoices_for_display(invoices)
+
+    # Notion 저장 (args.notion이 True인 경우)
+    if args.notion:
+        # Notion API 키 확인
+        notion_api_key = config.get_notion_api_key(args.notion_api_key)
+        if not notion_api_key:
+            console.print("[red]Notion API 키가 설정되지 않았습니다.[/red]")
+            console.print("[yellow]환경 변수 NOTION_API_KEY를 설정하거나 -notion-api-key 옵션을 사용하세요.[/yellow]")
+            return
+
+        # Invoice 데이터베이스 ID 확인
+        invoice_db_id = config.get_notion_database_id("invoice")
+        if not invoice_db_id:
+            console.print("[red]Invoice Notion 데이터베이스 ID가 설정되지 않았습니다.[/red]")
+            console.print("[yellow]config.json에서 invoice 데이터베이스 ID를 설정해주세요.[/yellow]")
+            return
+
+        # Notion에 저장
+        notion = notion_integration.NotionClient(notion_api_key)
+
+        update_existing = args.update_existing
+
+        with console.status("[bold cyan]Notion에 저장 중...[/bold cyan]", spinner="dots"):
+            stats = notion.save_invoices(
+                database_id=invoice_db_id,
+                invoices=invoices,
+                update_existing=update_existing,
+                verbose=args.verbose
+            )
+
+        console.print(f"\n[green]✓ Notion 저장 완료 (생성: {stats['created']}, 업데이트: {stats['updated']}, 스킵: {stats['skipped']})[/green]")
 
 
 if __name__ == "__main__":

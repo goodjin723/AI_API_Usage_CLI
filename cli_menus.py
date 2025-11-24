@@ -1,95 +1,114 @@
 """
 CLI 인터랙티브 메뉴 모듈
-사용자 인터페이스 및 메뉴 관리
+사용자 인터페이스 및 메뉴 관리 (Updated with questionary)
 """
 import sys
 import argparse
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich.prompt import Prompt
 from rich import box
+import questionary
+from questionary import Choice, Style
 import config
 import date_utils
 
-
 # Rich console 인스턴스
 console = Console()
+
+# Questionary 스타일 설정
+custom_style = Style([
+    ('qmark', 'fg:#00ff00 bold'),       # 질문 앞 마크 (초록색)
+    ('question', 'bold'),               # 질문 텍스트
+    ('answer', 'fg:#00ffff bold'),      # 선택된 답변 (하늘색)
+    ('pointer', 'fg:#00ff00 bold'),     # 선택 포인터 (초록색)
+    ('highlighted', 'fg:#00ff00 bold'), # 하이라이트된 선택지 (초록색)
+    ('selected', 'fg:#00ff00'),         # 선택된 항목
+    ('separator', 'fg:#808080'),        # 구분선
+    ('instruction', 'fg:#808080'),      # 설명 텍스트
+    ('text', ''),                       # 일반 텍스트
+    ('disabled', 'fg:#808080 italic')   # 비활성화된 항목
+])
 
 
 def show_main_menu() -> int:
     """메인 메뉴 표시"""
     console.print()
-
-    # 메뉴 타이틀
-    console.print("[bold blue]>> AI API 사용량 추적 CLI <<[/bold blue]")
+    console.print(Panel(
+        "[bold blue]AI API 사용량 추적 CLI[/bold blue]",
+        border_style="blue",
+        padding=(1, 2),
+        title="[bold]v1.0[/bold]",
+        title_align="right"
+    ))
     console.print()
 
-    # 3개의 버튼 박스 생성
-    menu_table = Table(show_header=False, box=box.ROUNDED, padding=(1, 2))
-    menu_table.add_column("번호", style="bold cyan", width=4, justify="center")
-    menu_table.add_column("메뉴", style="white", width=30)
+    try:
+        choice = questionary.select(
+            "작업을 선택하세요:",
+            choices=[
+                Choice("  1. 공통 설정 (API 키, DB 설정)", value=1),
+                Choice("  2. fal ai 사용량 추적", value=2),
+                Choice("  3. Invoices 수집", value=3),
+                questionary.Separator(),
+                Choice("  0. 종료", value=0),
+            ],
+            style=custom_style,
+            use_indicator=True,
+            pointer="❯",
+            qmark="?"
+        ).ask()
 
-    menu_table.add_row("1", "[bold]공통 설정[/bold]")
-    menu_table.add_row("2", "[bold green]fal ai 사용량 추적[/bold green]")
-    menu_table.add_row("3", "[bold yellow]Invoices 수집[/bold yellow]")
-    console.print(menu_table)
-
-    console.print()
-    menu_table2 = Table(show_header=False, box=None, padding=(0, 2))
-    menu_table2.add_column("번호", style="bold cyan", width=4)
-    menu_table2.add_column("메뉴", style="dim")
-    menu_table2.add_row("0", "종료")
-    console.print(menu_table2)
-
-    while True:
-        try:
-            choice = Prompt.ask("\n[cyan]메뉴 선택[/cyan]", choices=["0", "1", "2", "3"])
-            return int(choice)
-        except KeyboardInterrupt:
-            console.print("\n[yellow]프로그램을 종료합니다.[/yellow]")
+        if choice is None:
             sys.exit(0)
-        except Exception:
-            console.print("[red]올바른 숫자를 입력하세요.[/red]")
+        return choice
+
+    except KeyboardInterrupt:
+        console.print("\n[yellow]프로그램을 종료합니다.[/yellow]")
+        sys.exit(0)
 
 
 def show_common_settings_menu() -> None:
     """공통 설정 메뉴"""
     while True:
+        console.clear()
         console.print()
         console.print("[bold cyan]>> 공통 설정[/bold cyan]")
         console.print("[dim]" + "─" * 50 + "[/dim]")
         console.print()
 
-        # 메뉴 옵션
-        menu_table = Table(show_header=False, box=None, padding=(0, 2))
-        menu_table.add_column("번호", style="bold cyan", width=4)
-        menu_table.add_column("메뉴", style="white")
-
-        menu_table.add_row("1", "API 키 설정 [dim](fal ai, OpenAI, Notion)[/dim]")
-        menu_table.add_row("2", "Notion DB 설정 [dim](fal_ai, invoice)[/dim]")
-        menu_table.add_row("0", "[dim]뒤로 가기[/dim]")
-
-        console.print(menu_table)
-
         try:
-            choice = Prompt.ask("\n[cyan]선택[/cyan]", choices=["0", "1", "2"])
+            choice = questionary.select(
+                "설정 항목을 선택하세요:",
+                choices=[
+                    Choice("  1. API 키 설정 (fal ai, OpenAI, Notion)", value="1"),
+                    Choice("  2. Notion DB 설정 (fal_ai, invoice)", value="2"),
+                    questionary.Separator(),
+                    Choice("  0. 뒤로 가기", value="0"),
+                ],
+                style=custom_style,
+                use_indicator=True,
+                pointer="❯"
+            ).ask()
+
             if choice == "1":
                 show_api_key_menu()
             elif choice == "2":
                 show_notion_database_menu()
-            elif choice == "0":
+            elif choice == "0" or choice is None:
                 break
         except KeyboardInterrupt:
             break
         except Exception as e:
             console.print(f"[red]오류: {e}[/red]")
+            questionary.press_any_key_to_continue("계속하려면 아무 키나 누르세요...", style=custom_style).ask()
 
 
 def show_model_menu() -> None:
     """모델 관리 메뉴"""
     while True:
+        console.clear()
         models = config.get_models()
         console.print()
         console.print("[bold cyan]>> 모델 관리[/bold cyan]")
@@ -115,19 +134,24 @@ def show_model_menu() -> None:
 
         console.print()
 
-        # 메뉴 옵션
-        menu_table = Table(show_header=False, box=None, padding=(0, 2))
-        menu_table.add_column("번호", style="bold cyan", width=4)
-        menu_table.add_column("메뉴", style="white")
-
-        menu_table.add_row("1", "모델 추가")
-        menu_table.add_row("2", "모델 삭제" if models else "[dim]모델 삭제[/dim]")
-        menu_table.add_row("3", "뒤로 가기")
-
-        console.print(menu_table)
-
         try:
-            choice = Prompt.ask("\n[cyan]선택[/cyan]", choices=["1", "2", "3"])
+            choices = [
+                Choice("  1. 모델 추가", value="1"),
+            ]
+            if models:
+                choices.append(Choice("  2. 모델 삭제", value="2"))
+            
+            choices.append(questionary.Separator())
+            choices.append(Choice("  3. 뒤로 가기", value="3"))
+
+            choice = questionary.select(
+                "작업을 선택하세요:",
+                choices=choices,
+                style=custom_style,
+                use_indicator=True,
+                pointer="❯"
+            ).ask()
+
             if choice == "1":
                 add_model()
             elif choice == "2":
@@ -135,12 +159,14 @@ def show_model_menu() -> None:
                     delete_model()
                 else:
                     console.print("[yellow]삭제할 모델이 없습니다.[/yellow]")
-            elif choice == "3":
+                    questionary.press_any_key_to_continue("계속하려면 아무 키나 누르세요...", style=custom_style).ask()
+            elif choice == "3" or choice is None:
                 break
         except KeyboardInterrupt:
             break
         except Exception as e:
             console.print(f"[red]오류: {e}[/red]")
+            questionary.press_any_key_to_continue("계속하려면 아무 키나 누르세요...", style=custom_style).ask()
 
 
 def add_model() -> None:
@@ -148,54 +174,54 @@ def add_model() -> None:
     console.print()
     console.print("[bold cyan]➕ 모델 추가[/bold cyan]")
     console.print("[dim]" + "─" * 50 + "[/dim]")
-    console.print()
-    console.print("[dim]예: fal-ai/imagen4/preview/ultra[/dim]")
-
-    model_id = Prompt.ask("[cyan]모델 ID[/cyan]").strip()
+    
+    model_id = questionary.text(
+        "모델 ID를 입력하세요 (예: fal-ai/imagen4/preview/ultra):",
+        style=custom_style
+    ).ask()
 
     if not model_id:
-        console.print("[red]모델 ID를 입력해주세요.[/red]")
         return
 
+    model_id = model_id.strip()
     models = config.get_models()
     if model_id in models:
         console.print(f"[yellow]'{model_id}'는 이미 등록되어 있습니다.[/yellow]")
+        questionary.press_any_key_to_continue("계속하려면 아무 키나 누르세요...", style=custom_style).ask()
         return
 
     models.append(model_id)
     config.save_models(models)
     console.print(f"[green]✓ '{model_id}'가 추가되었습니다.[/green]")
+    questionary.press_any_key_to_continue("계속하려면 아무 키나 누르세요...", style=custom_style).ask()
 
 
 def delete_model() -> None:
     """모델 삭제"""
     models = config.get_models()
     if not models:
-        console.print("[yellow]삭제할 모델이 없습니다.[/yellow]")
         return
 
     console.print()
     console.print("[bold yellow]➖ 모델 삭제[/bold yellow]")
-    console.print("[dim]" + "─" * 50 + "[/dim]")
-    console.print()
+    
+    choices = [Choice(model, value=i) for i, model in enumerate(models)]
+    choices.append(Choice("취소", value=-1))
 
-    # 모델 목록 표시
-    table = Table(show_header=True, box=box.SIMPLE, border_style="yellow")
-    table.add_column("번호", style="yellow", width=6)
-    table.add_column("모델 ID", style="white")
+    idx = questionary.select(
+        "삭제할 모델을 선택하세요:",
+        choices=choices,
+        style=custom_style,
+        use_indicator=True
+    ).ask()
 
-    for i, model in enumerate(models, 1):
-        table.add_row(str(i), model)
+    if idx == -1 or idx is None:
+        return
 
-    console.print(table)
-
-    try:
-        choice = Prompt.ask("\n[yellow]삭제할 모델 번호[/yellow]", choices=[str(i) for i in range(1, len(models) + 1)])
-        deleted = models.pop(int(choice) - 1)
-        config.save_models(models)
-        console.print(f"[green]✓ '{deleted}'가 삭제되었습니다.[/green]")
-    except Exception as e:
-        console.print(f"[red]오류: {e}[/red]")
+    deleted = models.pop(idx)
+    config.save_models(models)
+    console.print(f"[green]✓ '{deleted}'가 삭제되었습니다.[/green]")
+    questionary.press_any_key_to_continue("계속하려면 아무 키나 누르세요...", style=custom_style).ask()
 
 
 def show_date_range_menu(args: argparse.Namespace) -> Dict[str, Any]:
@@ -207,6 +233,7 @@ def show_date_range_menu(args: argparse.Namespace) -> Dict[str, Any]:
     }
 
     while True:
+        console.clear()
         console.print()
         console.print("[bold magenta]>> 날짜 범위 설정[/bold magenta]")
         console.print("[dim]" + "─" * 50 + "[/dim]")
@@ -253,19 +280,20 @@ def show_date_range_menu(args: argparse.Namespace) -> Dict[str, Any]:
 
         console.print()
 
-        # 메뉴 옵션
-        menu_table = Table(show_header=False, box=None, padding=(0, 2))
-        menu_table.add_column("번호", style="bold cyan", width=4)
-        menu_table.add_column("메뉴", style="white")
-
-        menu_table.add_row("1", "프리셋 선택 [dim](오늘, 어제, 최근 7일 등)[/dim]")
-        menu_table.add_row("2", "시작/종료 날짜 직접 입력")
-        menu_table.add_row("3", "뒤로 가기")
-
-        console.print(menu_table)
-
         try:
-            choice = Prompt.ask("\n[cyan]선택[/cyan]", choices=["1", "2", "3"])
+            choice = questionary.select(
+                "설정 방식을 선택하세요:",
+                choices=[
+                    Choice("  1. 프리셋 선택 (오늘, 어제, 최근 7일 등)", value="1"),
+                    Choice("  2. 시작/종료 날짜 직접 입력", value="2"),
+                    questionary.Separator(),
+                    Choice("  3. 뒤로 가기", value="3"),
+                ],
+                style=custom_style,
+                use_indicator=True,
+                pointer="❯"
+            ).ask()
+
             if choice == "1":
                 preset = select_preset()
                 if preset:
@@ -280,69 +308,50 @@ def show_date_range_menu(args: argparse.Namespace) -> Dict[str, Any]:
                     date_settings["start_date"] = start
                     date_settings["end_date"] = end
                     return date_settings
-            elif choice == "3":
+            elif choice == "3" or choice is None:
                 return date_settings
         except KeyboardInterrupt:
             return date_settings
         except Exception as e:
             console.print(f"[red]오류: {e}[/red]")
+            questionary.press_any_key_to_continue("계속하려면 아무 키나 누르세요...", style=custom_style).ask()
 
 
 def select_preset() -> Optional[str]:
     """프리셋 선택"""
-    console.print()
-    console.print("[bold magenta]>> 프리셋 선택[/bold magenta]")
-    console.print("[dim]" + "─" * 50 + "[/dim]")
-    console.print()
-
-    table = Table(show_header=False, box=None, padding=(0, 2))
-    table.add_column("번호", style="bold cyan", width=4)
-    table.add_column("프리셋", style="white")
-
-    table.add_row("1", "오늘 (today)")
-    table.add_row("2", "어제 (yesterday)")
-    table.add_row("3", "최근 7일 (last-7-days)")
-    table.add_row("4", "최근 30일 (last-30-days)")
-    table.add_row("5", "이번 달 (this-month)")
-    table.add_row("6", "취소")
-
-    console.print(table)
-
-    presets = {
-        "1": "today",
-        "2": "yesterday",
-        "3": "last-7-days",
-        "4": "last-30-days",
-        "5": "this-month"
-    }
-
-    try:
-        choice = Prompt.ask("\n[cyan]선택[/cyan]", choices=["1", "2", "3", "4", "5", "6"])
-        if choice == "6":
-            return None
-        return presets.get(choice)
-    except KeyboardInterrupt:
-        return None
-    except Exception:
-        return None
+    choices = [
+        Choice("오늘 (today)", value="today"),
+        Choice("어제 (yesterday)", value="yesterday"),
+        Choice("최근 7일 (last-7-days)", value="last-7-days"),
+        Choice("최근 30일 (last-30-days)", value="last-30-days"),
+        Choice("이번 달 (this-month)", value="this-month"),
+        Choice("취소", value=None)
+    ]
+    
+    return questionary.select(
+        "프리셋을 선택하세요:",
+        choices=choices,
+        style=custom_style,
+        use_indicator=True,
+        pointer="❯"
+    ).ask()
 
 
-def input_custom_date_range() -> tuple[Optional[str], Optional[str]]:
+def input_custom_date_range() -> Tuple[Optional[str], Optional[str]]:
     """사용자 정의 날짜 범위 입력"""
     console.print()
     console.print("[bold magenta]>> 날짜 범위 직접 입력[/bold magenta]")
-    console.print("[dim]" + "─" * 50 + "[/dim]")
-    console.print()
     console.print("[dim]형식: YYYY-MM-DD[/dim]")
 
     try:
-        start = Prompt.ask("[cyan]시작 날짜[/cyan]").strip()
+        start = questionary.text("시작 날짜 (YYYY-MM-DD):", style=custom_style).ask()
         if not start:
             console.print("[red]시작 날짜를 입력해주세요.[/red]")
+            questionary.press_any_key_to_continue("계속하려면 아무 키나 누르세요...", style=custom_style).ask()
             return None, None
 
-        end = Prompt.ask("[cyan]종료 날짜 [dim](엔터 시 현재 날짜)[/dim][/cyan]", default="").strip()
-        return start, end if end else None
+        end = questionary.text("종료 날짜 (YYYY-MM-DD, 엔터 시 현재):", style=custom_style).ask()
+        return start.strip(), end.strip() if end else None
     except KeyboardInterrupt:
         return None, None
     except Exception:
@@ -352,6 +361,7 @@ def input_custom_date_range() -> tuple[Optional[str], Optional[str]]:
 def show_api_key_menu() -> None:
     """API 키 설정 메뉴"""
     while True:
+        console.clear()
         console.print()
         console.print("[bold green]>> API 키 설정[/bold green]")
         console.print("[dim]" + "─" * 50 + "[/dim]")
@@ -359,27 +369,15 @@ def show_api_key_menu() -> None:
 
         # fal.ai API 키 확인
         fal_api_key = config.get_api_key()
-        if fal_api_key:
-            masked_fal = fal_api_key[:8] + "..." + fal_api_key[-4:] if len(fal_api_key) > 12 else "***"
-            fal_status = f"[green]{masked_fal}[/green]"
-        else:
-            fal_status = "[dim]등록된 API 키 없음[/dim]"
+        fal_status = f"[green]{fal_api_key[:8]}...{fal_api_key[-4:]}[/green]" if fal_api_key else "[dim]등록된 API 키 없음[/dim]"
 
         # OpenAI API 키 확인
         openai_api_key = config.get_openai_api_key()
-        if openai_api_key:
-            masked_openai = openai_api_key[:8] + "..." + openai_api_key[-4:] if len(openai_api_key) > 12 else "***"
-            openai_status = f"[green]{masked_openai}[/green]"
-        else:
-            openai_status = "[dim]등록된 API 키 없음[/dim]"
+        openai_status = f"[green]{openai_api_key[:8]}...{openai_api_key[-4:]}[/green]" if openai_api_key else "[dim]등록된 API 키 없음[/dim]"
 
         # Notion API 키 확인
         notion_api_key = config.get_notion_api_key()
-        if notion_api_key:
-            masked_notion = notion_api_key[:8] + "..." + notion_api_key[-4:] if len(notion_api_key) > 12 else "***"
-            notion_status = f"[green]{masked_notion}[/green]"
-        else:
-            notion_status = "[dim]등록된 API 키 없음[/dim]"
+        notion_status = f"[green]{notion_api_key[:8]}...{notion_api_key[-4:]}[/green]" if notion_api_key else "[dim]등록된 API 키 없음[/dim]"
 
         # 현재 설정 표시
         info_table = Table(show_header=False, box=None, padding=(0, 1))
@@ -392,119 +390,52 @@ def show_api_key_menu() -> None:
         console.print(info_table)
         console.print()
 
-        # 메뉴 옵션
-        menu_table = Table(show_header=False, box=None, padding=(0, 2))
-        menu_table.add_column("번호", style="bold cyan", width=4)
-        menu_table.add_column("메뉴", style="white")
-        menu_table.add_row("1", "fal.ai API 키 입력/변경")
-        menu_table.add_row("2", "OpenAI API 키 입력/변경")
-        menu_table.add_row("3", "Notion API 키 입력/변경")
-        menu_table.add_row("0", "[dim]뒤로 가기[/dim]")
-
-        console.print(menu_table)
-
         try:
-            choice = Prompt.ask("\n[cyan]선택[/cyan]", choices=["0", "1", "2", "3"])
+            choice = questionary.select(
+                "설정할 키를 선택하세요:",
+                choices=[
+                    Choice("  1. fal.ai API 키 입력/변경", value="1"),
+                    Choice("  2. OpenAI API 키 입력/변경", value="2"),
+                    Choice("  3. Notion API 키 입력/변경", value="3"),
+                    questionary.Separator(),
+                    Choice("  0. 뒤로 가기", value="0"),
+                ],
+                style=custom_style,
+                use_indicator=True,
+                pointer="❯"
+            ).ask()
+
             if choice == "1":
-                console.print()
-                api_key = Prompt.ask("[cyan]fal.ai Admin API 키[/cyan]").strip()
+                api_key = questionary.password("fal.ai Admin API 키:", style=custom_style).ask()
                 if api_key:
-                    config.save_api_key(api_key)
+                    config.save_api_key(api_key.strip())
                     console.print("[green]✓ fal.ai API 키가 저장되었습니다.[/green]")
-                else:
-                    console.print("[red]API 키를 입력해주세요.[/red]")
+                    questionary.press_any_key_to_continue("계속하려면 아무 키나 누르세요...", style=custom_style).ask()
             elif choice == "2":
-                console.print()
-                api_key = Prompt.ask("[cyan]OpenAI API 키[/cyan]").strip()
+                api_key = questionary.password("OpenAI API 키:", style=custom_style).ask()
                 if api_key:
-                    config.save_openai_api_key(api_key)
+                    config.save_openai_api_key(api_key.strip())
                     console.print("[green]✓ OpenAI API 키가 저장되었습니다.[/green]")
-                else:
-                    console.print("[red]API 키를 입력해주세요.[/red]")
+                    questionary.press_any_key_to_continue("계속하려면 아무 키나 누르세요...", style=custom_style).ask()
             elif choice == "3":
-                console.print()
-                api_key = Prompt.ask("[cyan]Notion API 키[/cyan]").strip()
+                api_key = questionary.password("Notion API 키:", style=custom_style).ask()
                 if api_key:
-                    config.save_notion_api_key(api_key)
+                    config.save_notion_api_key(api_key.strip())
                     console.print("[green]✓ Notion API 키가 저장되었습니다.[/green]")
-                else:
-                    console.print("[red]API 키를 입력해주세요.[/red]")
-            elif choice == "0":
+                    questionary.press_any_key_to_continue("계속하려면 아무 키나 누르세요...", style=custom_style).ask()
+            elif choice == "0" or choice is None:
                 break
         except KeyboardInterrupt:
             break
         except Exception as e:
             console.print(f"[red]오류: {e}[/red]")
-
-
-def show_notion_save_menu(args: argparse.Namespace) -> None:
-    """Notion 저장 옵션 메뉴"""
-    while True:
-        console.print()
-        console.print("[bold yellow]>> Notion 저장 옵션[/bold yellow]")
-        console.print("[dim]" + "─" * 50 + "[/dim]")
-        console.print()
-
-        # 현재 모드 결정
-        if args.notion:
-            save_status = "[green]●[/green] 활성화"
-            mode_marker = ["  ", "[green]●[/green]"]
-        else:
-            save_status = "[dim]○[/dim] 비활성화"
-            mode_marker = ["[yellow]●[/yellow]", "  "]
-
-        update_status = "[green]업데이트[/green]" if args.update_existing else "[dim]스킵[/dim]"
-
-        # 현재 설정
-        status_table = Table(show_header=False, box=None, padding=(0, 1))
-        status_table.add_column("항목", style="cyan", width=16)
-        status_table.add_column("상태", style="white")
-
-        status_table.add_row("저장 모드", save_status)
-        status_table.add_row("중복 데이터 처리", update_status)
-
-        console.print(status_table)
-        console.print()
-
-        # 메뉴 옵션
-        menu_table = Table(show_header=False, box=None, padding=(0, 2))
-        menu_table.add_column("", width=3)
-        menu_table.add_column("번호", style="bold cyan", width=4)
-        menu_table.add_column("메뉴", style="white")
-
-        menu_table.add_row(mode_marker[0], "1", "비활성화 [dim](Notion에 저장하지 않음)[/dim]")
-        menu_table.add_row(mode_marker[1], "2", "활성화 [dim](Notion에 저장)[/dim]")
-        menu_table.add_row("", "", "")
-        menu_table.add_row("", "3", f"중복 데이터 업데이트 ON/OFF [dim](현재: {update_status})[/dim]")
-        menu_table.add_row("", "4", "뒤로 가기")
-
-        console.print(menu_table)
-
-        try:
-            choice = Prompt.ask("\n[cyan]선택[/cyan]", choices=["1", "2", "3", "4"])
-            if choice == "1":
-                args.notion = False
-                args.dry_run = False
-                console.print("[green]✓ Notion 저장이 비활성화되었습니다.[/green]")
-            elif choice == "2":
-                args.notion = True
-                args.dry_run = False
-                console.print("[green]✓ Notion 저장이 활성화되었습니다.[/green]")
-            elif choice == "3":
-                args.update_existing = not args.update_existing
-                status = "활성화" if args.update_existing else "비활성화"
-                console.print(f"[green]✓ 중복 데이터 업데이트가 {status}되었습니다.[/green]")
-            elif choice == "4":
-                break
-        except KeyboardInterrupt:
-            break
-        except Exception as e:
-            console.print(f"[red]오류: {e}[/red]")
+            questionary.press_any_key_to_continue("계속하려면 아무 키나 누르세요...", style=custom_style).ask()
 
 
 def show_notion_database_menu() -> None:
-    """Notion 데이터베이스 설정 메뉴 (fal_ai, invoice 고정)"""
+    """Notion 데이터베이스 설정 메뉴"""
     while True:
+        console.clear()
         console.print()
         console.print("[bold blue]>> Notion DB 설정[/bold blue]")
         console.print("[dim]" + "─" * 50 + "[/dim]")
@@ -519,170 +450,54 @@ def show_notion_database_menu() -> None:
         info_table.add_column("항목", style="cyan", width=18)
         info_table.add_column("값", style="white")
 
-        if fal_ai_db:
-            masked_fal = fal_ai_db[:8] + "..." + fal_ai_db[-4:]
-            info_table.add_row("fal_ai DB ID", f"[green]{masked_fal}[/green]")
-        else:
-            info_table.add_row("fal_ai DB ID", "[dim]미설정[/dim]")
-
-        if invoice_db:
-            masked_invoice = invoice_db[:8] + "..." + invoice_db[-4:]
-            info_table.add_row("invoice DB ID", f"[green]{masked_invoice}[/green]")
-        else:
-            info_table.add_row("invoice DB ID", "[dim]미설정[/dim]")
+        info_table.add_row("fal_ai DB ID", f"[green]{fal_ai_db[:8]}...{fal_ai_db[-4:]}[/green]" if fal_ai_db else "[dim]미설정[/dim]")
+        info_table.add_row("invoice DB ID", f"[green]{invoice_db[:8]}...{invoice_db[-4:]}[/green]" if invoice_db else "[dim]미설정[/dim]")
 
         console.print(info_table)
         console.print()
 
-        # 메뉴 옵션
-        menu_table = Table(show_header=False, box=None, padding=(0, 2))
-        menu_table.add_column("번호", style="bold cyan", width=4)
-        menu_table.add_column("메뉴", style="white")
-
-        menu_table.add_row("1", "fal_ai DB ID 설정")
-        menu_table.add_row("2", "invoice DB ID 설정")
-        menu_table.add_row("0", "[dim]뒤로 가기[/dim]")
-
-        console.print(menu_table)
-
         try:
-            choice = Prompt.ask("\n[cyan]선택[/cyan]", choices=["0", "1", "2"])
+            choice = questionary.select(
+                "설정할 DB를 선택하세요:",
+                choices=[
+                    Choice("  1. fal_ai DB ID 설정", value="1"),
+                    Choice("  2. invoice DB ID 설정", value="2"),
+                    questionary.Separator(),
+                    Choice("  0. 뒤로 가기", value="0"),
+                ],
+                style=custom_style,
+                use_indicator=True,
+                pointer="❯"
+            ).ask()
 
             if choice == "1":
-                console.print()
-                console.print("[bold cyan]fal_ai Notion DB ID 설정[/bold cyan]")
                 console.print("[dim]fal.ai 사용량 데이터를 저장할 Notion 데이터베이스 ID를 입력하세요.[/dim]")
-                db_id = Prompt.ask("[cyan]DB ID[/cyan]").strip()
+                db_id = questionary.text("fal_ai DB ID:", style=custom_style).ask()
                 if db_id:
-                    config.save_notion_database_id("fal_ai", db_id)
+                    config.save_notion_database_id("fal_ai", db_id.strip())
                     console.print("[green]✓ fal_ai DB ID가 저장되었습니다.[/green]")
-                else:
-                    console.print("[red]DB ID를 입력해주세요.[/red]")
-
+                    questionary.press_any_key_to_continue("계속하려면 아무 키나 누르세요...", style=custom_style).ask()
             elif choice == "2":
-                console.print()
-                console.print("[bold cyan]invoice Notion DB ID 설정[/bold cyan]")
                 console.print("[dim]Invoice 데이터를 저장할 Notion 데이터베이스 ID를 입력하세요.[/dim]")
-                db_id = Prompt.ask("[cyan]DB ID[/cyan]").strip()
+                db_id = questionary.text("invoice DB ID:", style=custom_style).ask()
                 if db_id:
-                    config.save_notion_database_id("invoice", db_id)
+                    config.save_notion_database_id("invoice", db_id.strip())
                     console.print("[green]✓ invoice DB ID가 저장되었습니다.[/green]")
-                else:
-                    console.print("[red]DB ID를 입력해주세요.[/red]")
-
-            elif choice == "0":
+                    questionary.press_any_key_to_continue("계속하려면 아무 키나 누르세요...", style=custom_style).ask()
+            elif choice == "0" or choice is None:
                 break
 
         except KeyboardInterrupt:
             break
         except Exception as e:
             console.print(f"[red]오류: {e}[/red]")
-
-
-def show_notion_menu() -> None:
-    """Notion 설정 메뉴"""
-    while True:
-        console.print()
-        console.print("[bold blue]>> Notion 설정[/bold blue]")
-        console.print("[dim]" + "─" * 50 + "[/dim]")
-        console.print()
-
-        # Notion API 키 확인
-        notion_api_key = config.get_notion_api_key()
-        if notion_api_key:
-            masked_key = notion_api_key[:8] + "..." + notion_api_key[-4:] if len(notion_api_key) > 12 else "***"
-            api_key_status = f"[green]{masked_key}[/green]"
-        else:
-            api_key_status = "[dim]등록된 API 키 없음[/dim]"
-
-        # 등록된 데이터베이스 목록
-        databases = config.get_all_notion_databases()
-
-        # 현재 설정 정보
-        info_table = Table(show_header=False, box=None, padding=(0, 1))
-        info_table.add_column("항목", style="cyan", width=16)
-        info_table.add_column("값", style="white")
-        info_table.add_row("Notion API 키", api_key_status)
-
-        if databases:
-            db_list = "\n".join([f"[white]{auth}: {db_id[:8]}...{db_id[-4:]}[/white]"
-                                 for auth, db_id in databases.items()])
-            info_table.add_row("데이터베이스", db_list)
-        else:
-            info_table.add_row("데이터베이스", "[dim]등록된 데이터베이스 없음[/dim]")
-
-        console.print(info_table)
-        console.print()
-
-        # 메뉴 옵션
-        menu_table = Table(show_header=False, box=None, padding=(0, 2))
-        menu_table.add_column("번호", style="bold cyan", width=4)
-        menu_table.add_column("메뉴", style="white")
-        menu_table.add_row("1", "Notion API 키 입력/변경")
-        menu_table.add_row("2", "데이터베이스 ID 추가/수정")
-        menu_table.add_row("3", "데이터베이스 ID 삭제" if databases else "[dim]데이터베이스 ID 삭제[/dim]")
-        menu_table.add_row("4", "뒤로 가기")
-
-        console.print(menu_table)
-
-        try:
-            choice = Prompt.ask("\n[cyan]선택[/cyan]", choices=["1", "2", "3", "4"])
-            if choice == "1":
-                console.print()
-                notion_api_key = Prompt.ask("[cyan]Notion API 키[/cyan]").strip()
-                if notion_api_key:
-                    try:
-                        config.save_notion_api_key(notion_api_key)
-                        console.print("[green]✓ Notion API 키가 저장되었습니다.[/green]")
-                    except Exception as e:
-                        console.print(f"[red]Notion API 키 저장 실패: {e}[/red]")
-                else:
-                    console.print("[red]Notion API 키를 입력해주세요.[/red]")
-            elif choice == "2":
-                console.print()
-                auth_method = Prompt.ask("[cyan]키 별칭 (auth_method)[/cyan]").strip()
-                if not auth_method:
-                    console.print("[red]키 별칭을 입력해주세요.[/red]")
-                    continue
-
-                database_id = Prompt.ask("[cyan]Notion 데이터베이스 ID[/cyan]").strip()
-                if database_id:
-                    config.save_notion_database_id(auth_method, database_id)
-                    console.print(f"[green]✓ '{auth_method}'의 데이터베이스 ID가 저장되었습니다.[/green]")
-                else:
-                    console.print("[red]데이터베이스 ID를 입력해주세요.[/red]")
-            elif choice == "3":
-                databases = config.get_all_notion_databases()
-                if not databases:
-                    console.print("[yellow]삭제할 데이터베이스가 없습니다.[/yellow]")
-                    continue
-
-                console.print()
-                console.print("[cyan]삭제할 데이터베이스의 키 별칭:[/cyan]")
-                for auth_method in databases.keys():
-                    console.print(f"  - [white]{auth_method}[/white]")
-
-                console.print()
-                auth_method = Prompt.ask("[cyan]>>[/cyan]",
-                                        choices=list(databases.keys()))
-
-                # config에서 제거
-                config_data = config.get_config()
-                if "notion_databases" in config_data:
-                    del config_data["notion_databases"][auth_method]
-                    config.save_config(config_data)
-                console.print(f"[green]✓ '{auth_method}'의 데이터베이스 ID가 삭제되었습니다.[/green]")
-            elif choice == "4":
-                break
-        except KeyboardInterrupt:
-            break
-        except Exception as e:
-            console.print(f"[red]오류: {e}[/red]")
+            questionary.press_any_key_to_continue("계속하려면 아무 키나 누르세요...", style=custom_style).ask()
 
 
 def show_fal_ai_menu(args: argparse.Namespace) -> Optional[Dict[str, Any]]:
     """fal.ai 사용량 추적 메뉴"""
     while True:
+        console.clear()
         console.print()
         console.print("[bold green]>> fal.ai 사용량 추적[/bold green]")
         console.print("[dim]" + "─" * 50 + "[/dim]")
@@ -711,46 +526,32 @@ def show_fal_ai_menu(args: argparse.Namespace) -> Optional[Dict[str, Any]]:
         info_table.add_column("항목", style="cyan", width=16)
         info_table.add_column("값", style="white")
 
-        # API 키
-        if api_key:
-            masked_key = api_key[:8] + "..." + api_key[-4:]
-            info_table.add_row("API 키", f"[green]{masked_key}[/green]")
-        else:
-            info_table.add_row("API 키", "[red]미설정[/red]")
-
-        # 모델
-        if models:
-            models_display = f"[green]{len(models)}개 등록[/green]"
-        else:
-            models_display = "[dim]없음[/dim]"
-        info_table.add_row("모델", models_display)
-
-        # 날짜 범위
+        info_table.add_row("API 키", f"[green]등록됨[/green]" if api_key else "[red]미설정[/red]")
+        info_table.add_row("모델", f"[green]{len(models)}개 등록[/green]" if models else "[dim]없음[/dim]")
         info_table.add_row("조회 기간", date_range_display)
 
         console.print(info_table)
         console.print()
 
-        # 메뉴 옵션
-        menu_table = Table(show_header=False, box=None, padding=(0, 2))
-        menu_table.add_column("번호", style="bold cyan", width=4)
-        menu_table.add_column("메뉴", style="white")
-
-        menu_table.add_row("1", "모델 관리")
-        menu_table.add_row("2", "날짜 범위 설정")
-        menu_table.add_row("3", "[bold green]조회 실행[/bold green]")
-        menu_table.add_row("0", "[dim]뒤로 가기[/dim]")
-
-        console.print(menu_table)
-
         try:
-            choice = Prompt.ask("\n[cyan]선택[/cyan]", choices=["0", "1", "2", "3"])
+            choice = questionary.select(
+                "작업을 선택하세요:",
+                choices=[
+                    Choice("  1. 모델 관리", value="1"),
+                    Choice("  2. 날짜 범위 설정", value="2"),
+                    Choice("  3. 조회 실행", value="3"),
+                    questionary.Separator(),
+                    Choice("  0. 뒤로 가기", value="0"),
+                ],
+                style=custom_style,
+                use_indicator=True,
+                pointer="❯"
+            ).ask()
 
             if choice == "1":
                 show_model_menu()
             elif choice == "2":
                 date_settings = show_date_range_menu(args)
-                # args에 반영
                 if date_settings.get("preset"):
                     args.preset = date_settings["preset"]
                     args.start_date = None
@@ -760,20 +561,21 @@ def show_fal_ai_menu(args: argparse.Namespace) -> Optional[Dict[str, Any]]:
                     args.start_date = date_settings["start_date"]
                     args.end_date = date_settings.get("end_date")
             elif choice == "3":
-                # 조회 실행
                 return {"action": "query"}
-            elif choice == "0":
+            elif choice == "0" or choice is None:
                 return None
 
         except KeyboardInterrupt:
             return None
         except Exception as e:
             console.print(f"[red]오류: {e}[/red]")
+            questionary.press_any_key_to_continue("계속하려면 아무 키나 누르세요...", style=custom_style).ask()
 
 
 def show_invoice_keyword_menu() -> None:
     """Invoice 검색 키워드 설정 메뉴"""
     while True:
+        console.clear()
         console.print()
         console.print("[bold cyan]>> 검색 키워드 설정[/bold cyan]")
         console.print("[dim]" + "─" * 50 + "[/dim]")
@@ -796,62 +598,59 @@ def show_invoice_keyword_menu() -> None:
 
         console.print()
 
-        # 메뉴 옵션
-        menu_table = Table(show_header=False, box=None, padding=(0, 2))
-        menu_table.add_column("번호", style="bold cyan", width=4)
-        menu_table.add_column("메뉴", style="white")
-
-        menu_table.add_row("1", "키워드 추가")
-        if keywords_list:
-            menu_table.add_row("2", "키워드 삭제")
-        else:
-            menu_table.add_row("2", "[dim]키워드 삭제[/dim]")
-        menu_table.add_row("0", "[dim]뒤로 가기[/dim]")
-
-        console.print(menu_table)
-
         try:
-            choice = Prompt.ask("\n[cyan]선택[/cyan]", choices=["0", "1", "2"])
+            choices = [Choice("  1. 키워드 추가", value="1")]
+            if keywords_list:
+                choices.append(Choice("  2. 키워드 삭제", value="2"))
+            choices.append(Choice("  0. 뒤로 가기", value="0"))
+
+            choice = questionary.select(
+                "작업을 선택하세요:",
+                choices=choices,
+                style=custom_style,
+                use_indicator=True,
+                pointer="❯"
+            ).ask()
 
             if choice == "1":
-                # 키워드 추가
-                console.print()
                 console.print("[dim]예: Your Replit receipt, AWS Invoice[/dim]")
-                new_keyword = Prompt.ask("[cyan]추가할 검색 키워드[/cyan]").strip()
-
+                new_keyword = questionary.text("추가할 검색 키워드:", style=custom_style).ask()
+                
                 if new_keyword:
+                    new_keyword = new_keyword.strip()
                     if new_keyword in keywords_list:
                         console.print(f"[yellow]'{new_keyword}'는 이미 등록되어 있습니다.[/yellow]")
                     else:
                         keywords_list.append(new_keyword)
                         config.save_invoice_search_keywords(keywords_list)
                         console.print(f"[green]✓ '{new_keyword}'가 추가되었습니다.[/green]")
-                else:
-                    console.print("[red]키워드를 입력해주세요.[/red]")
+                    questionary.press_any_key_to_continue("계속하려면 아무 키나 누르세요...", style=custom_style).ask()
 
             elif choice == "2":
-                # 키워드 삭제
-                if not keywords_list:
-                    console.print("[yellow]삭제할 키워드가 없습니다.[/yellow]")
-                    continue
+                kw_choices = [Choice(kw, value=i) for i, kw in enumerate(keywords_list)]
+                kw_choices.append(Choice("취소", value=-1))
+                
+                idx = questionary.select(
+                    "삭제할 키워드를 선택하세요:",
+                    choices=kw_choices,
+                    style=custom_style,
+                    use_indicator=True
+                ).ask()
 
-                try:
-                    kw_choice = Prompt.ask("\n[yellow]삭제할 키워드 번호[/yellow]",
-                                          choices=[str(i) for i in range(1, len(keywords_list) + 1)])
-
-                    deleted = keywords_list.pop(int(kw_choice) - 1)
+                if idx != -1 and idx is not None:
+                    deleted = keywords_list.pop(idx)
                     config.save_invoice_search_keywords(keywords_list)
                     console.print(f"[green]✓ '{deleted}'가 삭제되었습니다.[/green]")
-                except (ValueError, IndexError):
-                    console.print("[red]올바른 번호를 선택해주세요.[/red]")
+                    questionary.press_any_key_to_continue("계속하려면 아무 키나 누르세요...", style=custom_style).ask()
 
-            elif choice == "0":
+            elif choice == "0" or choice is None:
                 break
 
         except KeyboardInterrupt:
             break
         except Exception as e:
             console.print(f"[red]오류: {e}[/red]")
+            questionary.press_any_key_to_continue("계속하려면 아무 키나 누르세요...", style=custom_style).ask()
 
 
 def show_invoice_menu() -> Optional[Dict[str, Any]]:
@@ -859,6 +658,7 @@ def show_invoice_menu() -> Optional[Dict[str, Any]]:
     period_settings = {"start_date": None, "end_date": None, "days": 90}
 
     while True:
+        console.clear()
         console.print()
         console.print("[bold yellow]>> Invoices 수집[/bold yellow]")
         console.print("[dim]" + "─" * 50 + "[/dim]")
@@ -891,74 +691,57 @@ def show_invoice_menu() -> Optional[Dict[str, Any]]:
         console.print(info_table)
         console.print()
 
-        # 메뉴 옵션
-        menu_table = Table(show_header=False, box=None, padding=(0, 2))
-        menu_table.add_column("번호", style="bold cyan", width=4)
-        menu_table.add_column("메뉴", style="white")
-
-        menu_table.add_row("1", "검색 키워드 설정 [dim](추가/삭제)[/dim]")
-        menu_table.add_row("2", "검색 기간 설정")
-        menu_table.add_row("3", "[bold yellow]조회 실행[/bold yellow]")
-        menu_table.add_row("0", "[dim]뒤로 가기[/dim]")
-
-        console.print(menu_table)
-
         try:
-            choice = Prompt.ask("\n[cyan]선택[/cyan]", choices=["0", "1", "2", "3"])
+            choice = questionary.select(
+                "작업을 선택하세요:",
+                choices=[
+                    Choice("  1. 검색 키워드 설정 (추가/삭제)", value="1"),
+                    Choice("  2. 검색 기간 설정", value="2"),
+                    Choice("  3. 조회 실행", value="3"),
+                    Choice("  0. 뒤로 가기", value="0"),
+                ],
+                style=custom_style,
+                use_indicator=True,
+                pointer="❯"
+            ).ask()
 
             if choice == "1":
-                # 검색 키워드 설정 서브메뉴
                 show_invoice_keyword_menu()
             elif choice == "2":
-                # 검색 기간 설정
-                console.print()
-                console.print("[bold magenta]>> 검색 기간 설정[/bold magenta]")
-                console.print("[dim]" + "─" * 50 + "[/dim]")
-                console.print()
+                p_choice = questionary.select(
+                    "기간 설정 방식:",
+                    choices=[
+                        Choice("1. 최근 N일", value="1"),
+                        Choice("2. 시작/종료 날짜 직접 입력", value="2"),
+                        Choice("0. 취소", value="0"),
+                    ],
+                    style=custom_style,
+                    use_indicator=True,
+                    pointer="❯"
+                ).ask()
 
-                period_menu = Table(show_header=False, box=None, padding=(0, 2))
-                period_menu.add_column("번호", style="bold cyan", width=4)
-                period_menu.add_column("메뉴", style="white")
-
-                period_menu.add_row("1", "최근 N일")
-                period_menu.add_row("2", "시작/종료 날짜 직접 입력")
-                period_menu.add_row("0", "취소")
-
-                console.print(period_menu)
-
-                period_choice = Prompt.ask("\n[cyan]선택[/cyan]", choices=["0", "1", "2"])
-
-                if period_choice == "1":
-                    console.print()
-                    days_input = Prompt.ask("[cyan]최근 며칠[/cyan]", default=str(period_settings["days"]))
-                    try:
-                        days = int(days_input)
-                        if days > 0:
-                            period_settings["days"] = days
-                            period_settings["start_date"] = None
-                            period_settings["end_date"] = None
-                            console.print(f"[green]✓ 검색 기간이 최근 {days}일로 설정되었습니다.[/green]")
-                        else:
-                            console.print("[red]양수를 입력해주세요.[/red]")
-                    except ValueError:
-                        console.print("[red]올바른 숫자를 입력해주세요.[/red]")
-
-                elif period_choice == "2":
-                    console.print()
-                    console.print("[dim]형식: YYYY-MM-DD[/dim]")
-                    start = Prompt.ask("[cyan]시작 날짜[/cyan]").strip()
+                if p_choice == "1":
+                    days = questionary.text(
+                        "최근 며칠 (기본: 90):", 
+                        default=str(period_settings["days"]),
+                        style=custom_style
+                    ).ask()
+                    if days and days.isdigit():
+                        period_settings["days"] = int(days)
+                        period_settings["start_date"] = None
+                        period_settings["end_date"] = None
+                
+                elif p_choice == "2":
+                    start = questionary.text("시작 날짜 (YYYY-MM-DD):", style=custom_style).ask()
                     if start:
-                        end = Prompt.ask("[cyan]종료 날짜 [dim](엔터 시 오늘)[/dim][/cyan]", default="").strip()
-                        period_settings["start_date"] = start
-                        period_settings["end_date"] = end if end else None
-                        console.print(f"[green]✓ 검색 기간이 {start} ~ {end if end else '현재'}로 설정되었습니다.[/green]")
-                    else:
-                        console.print("[red]시작 날짜를 입력해주세요.[/red]")
+                        end = questionary.text("종료 날짜 (엔터 시 오늘):", style=custom_style).ask()
+                        period_settings["start_date"] = start.strip()
+                        period_settings["end_date"] = end.strip() if end else None
 
             elif choice == "3":
-                # Invoice 조회 실행
                 if not invoice_keywords_list:
                     console.print("[red]검색 키워드가 없습니다. 먼저 키워드를 추가해주세요.[/red]")
+                    questionary.press_any_key_to_continue("계속하려면 아무 키나 누르세요...", style=custom_style).ask()
                     continue
 
                 return {
@@ -967,10 +750,11 @@ def show_invoice_menu() -> Optional[Dict[str, Any]]:
                     "end_date": period_settings["end_date"],
                     "days": period_settings["days"]
                 }
-            elif choice == "0":
+            elif choice == "0" or choice is None:
                 return None
-                
+
         except KeyboardInterrupt:
             return None
         except Exception as e:
             console.print(f"[red]오류: {e}[/red]")
+            questionary.press_any_key_to_continue("계속하려면 아무 키나 누르세요...", style=custom_style).ask()
