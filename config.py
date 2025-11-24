@@ -53,7 +53,7 @@ def save_config(config: Dict[str, Any]) -> None:
 def _get_default_config() -> Dict[str, Any]:
     """기본 설정값"""
     return {
-        "timezone": "GMT",
+        "timezone": "Asia/Seoul",
         "default_date_range": {
             "preset": "last-30-days"
         },
@@ -100,7 +100,7 @@ def get_models() -> List[str]:
 def get_timezone() -> str:
     """기본 타임존 가져오기"""
     config = get_config()
-    return config.get("timezone", "GMT")
+    return config.get("timezone", "Asia/Seoul")
 
 
 def set_timezone(timezone: str) -> None:
@@ -152,6 +152,59 @@ def save_notion_api_key(api_key: str) -> None:
     """Notion API 키를 config.json에 저장"""
     config_data = get_config()
     config_data["notion_api_key"] = api_key
+    save_config(config_data)
+
+
+def get_openai_api_key(cli_openai_api_key: Optional[str] = None) -> Optional[str]:
+    """
+    OpenAI API 키 가져오기
+    우선순위: CLI 옵션 > 환경 변수 > config.json > None
+    """
+    if cli_openai_api_key:
+        return cli_openai_api_key
+    
+    # 환경 변수 우선
+    env_key = os.getenv("OPENAI_API_KEY")
+    if env_key:
+        return env_key
+    
+    # config.json에서 가져오기
+    config_data = get_config()
+    return config_data.get("openai_api_key")
+
+
+def save_openai_api_key(api_key: str) -> None:
+    """OpenAI API 키를 config.json에 저장"""
+    config_data = get_config()
+    config_data["openai_api_key"] = api_key
+    save_config(config_data)
+
+
+def get_google_credentials_path() -> str:
+    """
+    Google OAuth credentials.json 파일 경로 가져오기
+    우선순위: config.json > 기본 경로 (./credentials.json)
+    """
+    config_data = get_config()
+    path = config_data.get("google_credentials_path", "./credentials.json")
+    return str(PROJECT_ROOT / path) if not os.path.isabs(path) else path
+
+
+def get_google_tokens_path() -> str:
+    """
+    Google OAuth tokens.json 파일 경로 가져오기
+    우선순위: config.json > 기본 경로 (./google_tokens.json)
+    """
+    config_data = get_config()
+    path = config_data.get("google_tokens_path", "./google_tokens.json")
+    return str(PROJECT_ROOT / path) if not os.path.isabs(path) else path
+
+
+def save_google_paths(credentials_path: str, tokens_path: str) -> None:
+    """Google OAuth 파일 경로를 config.json에 저장"""
+    config_data = get_config()
+    config_data["google_credentials_path"] = credentials_path
+    config_data["google_tokens_path"] = tokens_path
     save_config(config_data)
 
 

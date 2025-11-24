@@ -41,6 +41,10 @@ env/
 # Config files with sensitive data
 config.json
 
+# Google OAuth credentials and tokens
+credentials.json
+google_tokens.json
+
 # OS
 .DS_Store
 Thumbs.db
