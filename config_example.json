@@ -10,8 +10,7 @@
   "notion_api_key": "ntn_YOUR_NOTION_API_KEY_HERE",
   "notion_databases": {
     "fal_ai": "YOUR_FAL_AI_UNIFIED_DATABASE_ID",
-    "invoice_replit": "YOUR_INVOICE_REPLIT_DATABASE_ID",
-    "invoice_aws": "YOUR_INVOICE_AWS_DATABASE_ID"
+    "invoice": "YOUR_INVOICE_REPLIT_DATABASE_ID"
   },
   "api_key": "YOUR_FAL_AI_ADMIN_API_KEY_HERE",
   "openai_api_key": "YOUR_OPENAI_API_KEY_HERE",

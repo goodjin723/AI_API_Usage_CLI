@@ -22,31 +22,30 @@ def show_main_menu() -> int:
     """메인 메뉴 표시"""
     console.print()
 
-    # 메뉴 테이블 생성
-    table = Table(show_header=False, box=None, padding=(0, 2))
-    table.add_column("번호", style="bold cyan", width=4)
-    table.add_column("메뉴", style="white")
+    # 메뉴 타이틀
+    console.print("[bold blue]>> AI API 사용량 추적 CLI <<[/bold blue]")
+    console.print()
 
-    table.add_row("1", "모델 관리")
-    table.add_row("2", "날짜 범위 설정")
-    table.add_row("3", "API 키 설정")
-    table.add_row("4", "Notion 설정 [dim](API 키, 데이터베이스)[/dim]")
-    table.add_row("5", "Notion 저장 옵션 [dim](저장, 업데이트)[/dim]")
-    table.add_row("6", "[bold green]조회 실행 (fal.ai 사용량)[/bold green]")
-    table.add_row("7", "[bold yellow]Invoice 관리 (Gmail)[/bold yellow]")
-    table.add_row("8", "[dim]종료[/dim]")
+    # 3개의 버튼 박스 생성
+    menu_table = Table(show_header=False, box=box.ROUNDED, padding=(1, 2))
+    menu_table.add_column("번호", style="bold cyan", width=4, justify="center")
+    menu_table.add_column("메뉴", style="white", width=30)
 
-    panel = Panel(
-        table,
-        title="[bold blue]🚀 fal.ai 사용량 추적 CLI[/bold blue]",
-        border_style="blue",
-        padding=(0, 1)
-    )
-    console.print(panel)
+    menu_table.add_row("1", "[bold]공통 설정[/bold]")
+    menu_table.add_row("2", "[bold green]fal ai 사용량 추적[/bold green]")
+    menu_table.add_row("3", "[bold yellow]Invoices 수집[/bold yellow]")
+    console.print(menu_table)
+
+    console.print()
+    menu_table2 = Table(show_header=False, box=None, padding=(0, 2))
+    menu_table2.add_column("번호", style="bold cyan", width=4)
+    menu_table2.add_column("메뉴", style="dim")
+    menu_table2.add_row("0", "종료")
+    console.print(menu_table2)
 
     while True:
         try:
-            choice = Prompt.ask("\n[cyan]메뉴 선택[/cyan]", choices=["1", "2", "3", "4", "5", "6", "7", "8"])
+            choice = Prompt.ask("\n[cyan]메뉴 선택[/cyan]", choices=["0", "1", "2", "3"])
             return int(choice)
         except KeyboardInterrupt:
             console.print("\n[yellow]프로그램을 종료합니다.[/yellow]")
@@ -55,12 +54,45 @@ def show_main_menu() -> int:
             console.print("[red]올바른 숫자를 입력하세요.[/red]")
 
 
+def show_common_settings_menu() -> None:
+    """공통 설정 메뉴"""
+    while True:
+        console.print()
+        console.print("[bold cyan]>> 공통 설정[/bold cyan]")
+        console.print("[dim]" + "─" * 50 + "[/dim]")
+        console.print()
+
+        # 메뉴 옵션
+        menu_table = Table(show_header=False, box=None, padding=(0, 2))
+        menu_table.add_column("번호", style="bold cyan", width=4)
+        menu_table.add_column("메뉴", style="white")
+
+        menu_table.add_row("1", "API 키 설정 [dim](fal ai, OpenAI, Notion)[/dim]")
+        menu_table.add_row("2", "Notion DB 설정 [dim](fal_ai, invoice)[/dim]")
+        menu_table.add_row("0", "[dim]뒤로 가기[/dim]")
+
+        console.print(menu_table)
+
+        try:
+            choice = Prompt.ask("\n[cyan]선택[/cyan]", choices=["0", "1", "2"])
+            if choice == "1":
+                show_api_key_menu()
+            elif choice == "2":
+                show_notion_database_menu()
+            elif choice == "0":
+                break
+        except KeyboardInterrupt:
+            break
+        except Exception as e:
+            console.print(f"[red]오류: {e}[/red]")
+
+
 def show_model_menu() -> None:
     """모델 관리 메뉴"""
     while True:
         models = config.get_models()
         console.print()
-        console.print("[bold cyan]📦 모델 관리[/bold cyan]")
+        console.print("[bold cyan]>> 모델 관리[/bold cyan]")
         console.print("[dim]" + "─" * 50 + "[/dim]")
         console.print()
 
@@ -176,7 +208,7 @@ def show_date_range_menu(args: argparse.Namespace) -> Dict[str, Any]:
 
     while True:
         console.print()
-        console.print("[bold magenta]📅 날짜 범위 설정[/bold magenta]")
+        console.print("[bold magenta]>> 날짜 범위 설정[/bold magenta]")
         console.print("[dim]" + "─" * 50 + "[/dim]")
         console.print()
 
@@ -259,7 +291,7 @@ def show_date_range_menu(args: argparse.Namespace) -> Dict[str, Any]:
 def select_preset() -> Optional[str]:
     """프리셋 선택"""
     console.print()
-    console.print("[bold magenta]📅 프리셋 선택[/bold magenta]")
+    console.print("[bold magenta]>> 프리셋 선택[/bold magenta]")
     console.print("[dim]" + "─" * 50 + "[/dim]")
     console.print()
 
@@ -298,7 +330,7 @@ def select_preset() -> Optional[str]:
 def input_custom_date_range() -> tuple[Optional[str], Optional[str]]:
     """사용자 정의 날짜 범위 입력"""
     console.print()
-    console.print("[bold magenta]📅 날짜 범위 직접 입력[/bold magenta]")
+    console.print("[bold magenta]>> 날짜 범위 직접 입력[/bold magenta]")
     console.print("[dim]" + "─" * 50 + "[/dim]")
     console.print()
     console.print("[dim]형식: YYYY-MM-DD[/dim]")
@@ -321,7 +353,7 @@ def show_api_key_menu() -> None:
     """API 키 설정 메뉴"""
     while True:
         console.print()
-        console.print("[bold green]🔑 API 키 설정[/bold green]")
+        console.print("[bold green]>> API 키 설정[/bold green]")
         console.print("[dim]" + "─" * 50 + "[/dim]")
         console.print()
 
@@ -341,12 +373,21 @@ def show_api_key_menu() -> None:
         else:
             openai_status = "[dim]등록된 API 키 없음[/dim]"
 
+        # Notion API 키 확인
+        notion_api_key = config.get_notion_api_key()
+        if notion_api_key:
+            masked_notion = notion_api_key[:8] + "..." + notion_api_key[-4:] if len(notion_api_key) > 12 else "***"
+            notion_status = f"[green]{masked_notion}[/green]"
+        else:
+            notion_status = "[dim]등록된 API 키 없음[/dim]"
+
         # 현재 설정 표시
         info_table = Table(show_header=False, box=None, padding=(0, 1))
         info_table.add_column("항목", style="cyan", width=16)
         info_table.add_column("값", style="white")
         info_table.add_row("fal.ai API 키", fal_status)
         info_table.add_row("OpenAI API 키", openai_status)
+        info_table.add_row("Notion API 키", notion_status)
 
         console.print(info_table)
         console.print()
@@ -357,12 +398,13 @@ def show_api_key_menu() -> None:
         menu_table.add_column("메뉴", style="white")
         menu_table.add_row("1", "fal.ai API 키 입력/변경")
         menu_table.add_row("2", "OpenAI API 키 입력/변경")
-        menu_table.add_row("3", "뒤로 가기")
+        menu_table.add_row("3", "Notion API 키 입력/변경")
+        menu_table.add_row("0", "[dim]뒤로 가기[/dim]")
 
         console.print(menu_table)
 
         try:
-            choice = Prompt.ask("\n[cyan]선택[/cyan]", choices=["1", "2", "3"])
+            choice = Prompt.ask("\n[cyan]선택[/cyan]", choices=["0", "1", "2", "3"])
             if choice == "1":
                 console.print()
                 api_key = Prompt.ask("[cyan]fal.ai Admin API 키[/cyan]").strip()
@@ -380,6 +422,14 @@ def show_api_key_menu() -> None:
                 else:
                     console.print("[red]API 키를 입력해주세요.[/red]")
             elif choice == "3":
+                console.print()
+                api_key = Prompt.ask("[cyan]Notion API 키[/cyan]").strip()
+                if api_key:
+                    config.save_notion_api_key(api_key)
+                    console.print("[green]✓ Notion API 키가 저장되었습니다.[/green]")
+                else:
+                    console.print("[red]API 키를 입력해주세요.[/red]")
+            elif choice == "0":
                 break
         except KeyboardInterrupt:
             break
@@ -391,7 +441,7 @@ def show_notion_save_menu(args: argparse.Namespace) -> None:
     """Notion 저장 옵션 메뉴"""
     while True:
         console.print()
-        console.print("[bold yellow]💾 Notion 저장 옵션[/bold yellow]")
+        console.print("[bold yellow]>> Notion 저장 옵션[/bold yellow]")
         console.print("[dim]" + "─" * 50 + "[/dim]")
         console.print()
 
@@ -452,11 +502,88 @@ def show_notion_save_menu(args: argparse.Namespace) -> None:
             console.print(f"[red]오류: {e}[/red]")
 
 
+def show_notion_database_menu() -> None:
+    """Notion 데이터베이스 설정 메뉴 (fal_ai, invoice 고정)"""
+    while True:
+        console.print()
+        console.print("[bold blue]>> Notion DB 설정[/bold blue]")
+        console.print("[dim]" + "─" * 50 + "[/dim]")
+        console.print()
+
+        # fal_ai, invoice DB ID 확인
+        fal_ai_db = config.get_notion_database_id("fal_ai")
+        invoice_db = config.get_notion_database_id("invoice")
+
+        # 현재 설정 표시
+        info_table = Table(show_header=False, box=None, padding=(0, 1))
+        info_table.add_column("항목", style="cyan", width=18)
+        info_table.add_column("값", style="white")
+
+        if fal_ai_db:
+            masked_fal = fal_ai_db[:8] + "..." + fal_ai_db[-4:]
+            info_table.add_row("fal_ai DB ID", f"[green]{masked_fal}[/green]")
+        else:
+            info_table.add_row("fal_ai DB ID", "[dim]미설정[/dim]")
+
+        if invoice_db:
+            masked_invoice = invoice_db[:8] + "..." + invoice_db[-4:]
+            info_table.add_row("invoice DB ID", f"[green]{masked_invoice}[/green]")
+        else:
+            info_table.add_row("invoice DB ID", "[dim]미설정[/dim]")
+
+        console.print(info_table)
+        console.print()
+
+        # 메뉴 옵션
+        menu_table = Table(show_header=False, box=None, padding=(0, 2))
+        menu_table.add_column("번호", style="bold cyan", width=4)
+        menu_table.add_column("메뉴", style="white")
+
+        menu_table.add_row("1", "fal_ai DB ID 설정")
+        menu_table.add_row("2", "invoice DB ID 설정")
+        menu_table.add_row("0", "[dim]뒤로 가기[/dim]")
+
+        console.print(menu_table)
+
+        try:
+            choice = Prompt.ask("\n[cyan]선택[/cyan]", choices=["0", "1", "2"])
+
+            if choice == "1":
+                console.print()
+                console.print("[bold cyan]fal_ai Notion DB ID 설정[/bold cyan]")
+                console.print("[dim]fal.ai 사용량 데이터를 저장할 Notion 데이터베이스 ID를 입력하세요.[/dim]")
+                db_id = Prompt.ask("[cyan]DB ID[/cyan]").strip()
+                if db_id:
+                    config.save_notion_database_id("fal_ai", db_id)
+                    console.print("[green]✓ fal_ai DB ID가 저장되었습니다.[/green]")
+                else:
+                    console.print("[red]DB ID를 입력해주세요.[/red]")
+
+            elif choice == "2":
+                console.print()
+                console.print("[bold cyan]invoice Notion DB ID 설정[/bold cyan]")
+                console.print("[dim]Invoice 데이터를 저장할 Notion 데이터베이스 ID를 입력하세요.[/dim]")
+                db_id = Prompt.ask("[cyan]DB ID[/cyan]").strip()
+                if db_id:
+                    config.save_notion_database_id("invoice", db_id)
+                    console.print("[green]✓ invoice DB ID가 저장되었습니다.[/green]")
+                else:
+                    console.print("[red]DB ID를 입력해주세요.[/red]")
+
+            elif choice == "0":
+                break
+
+        except KeyboardInterrupt:
+            break
+        except Exception as e:
+            console.print(f"[red]오류: {e}[/red]")
+
+
 def show_notion_menu() -> None:
     """Notion 설정 메뉴"""
     while True:
         console.print()
-        console.print("[bold blue]📝 Notion 설정[/bold blue]")
+        console.print("[bold blue]>> Notion 설정[/bold blue]")
         console.print("[dim]" + "─" * 50 + "[/dim]")
         console.print()
 
@@ -553,38 +680,54 @@ def show_notion_menu() -> None:
             console.print(f"[red]오류: {e}[/red]")
 
 
-def show_invoice_menu() -> Optional[Dict[str, Any]]:
-    """Invoice 관리 메뉴"""
-    period_settings = {"start_date": None, "end_date": None, "days": 90}
-    
+def show_fal_ai_menu(args: argparse.Namespace) -> Optional[Dict[str, Any]]:
+    """fal.ai 사용량 추적 메뉴"""
     while True:
         console.print()
-        console.print("[bold yellow]📧 Invoice 관리 (Gmail)[/bold yellow]")
+        console.print("[bold green]>> fal.ai 사용량 추적[/bold green]")
         console.print("[dim]" + "─" * 50 + "[/dim]")
         console.print()
 
         # 현재 설정 확인
-        invoice_keywords_list = config.get_invoice_search_keywords()
-        
+        models = config.get_models()
+        api_key = config.get_api_key()
+
+        # 날짜 범위 표시
+        try:
+            start, end = date_utils.parse_date_range(
+                preset=args.preset,
+                start_date=args.start_date,
+                end_date=args.end_date,
+                tz=args.timezone or config.get_timezone()
+            )
+            start_display = start.strftime("%Y-%m-%d")
+            end_display = end.strftime("%Y-%m-%d")
+            date_range_display = f"[yellow]{start_display} ~ {end_display}[/yellow]"
+        except:
+            date_range_display = "[dim]미설정[/dim]"
+
         # 설정 정보 표시
         info_table = Table(show_header=False, box=None, padding=(0, 1))
         info_table.add_column("항목", style="cyan", width=16)
         info_table.add_column("값", style="white")
-        
-        # 키워드 리스트 표시
-        if invoice_keywords_list:
-            keywords_display = "\n".join([f"  • {kw}" for kw in invoice_keywords_list])
-            info_table.add_row("검색 키워드", f"[green]({len(invoice_keywords_list)}개)\n{keywords_display}[/green]")
+
+        # API 키
+        if api_key:
+            masked_key = api_key[:8] + "..." + api_key[-4:]
+            info_table.add_row("API 키", f"[green]{masked_key}[/green]")
         else:
-            info_table.add_row("검색 키워드", "[dim]없음[/dim]")
-        
-        # 검색 기간 표시
-        if period_settings["start_date"]:
-            period_str = f"{period_settings['start_date']} ~ {period_settings.get('end_date', '현재')}"
+            info_table.add_row("API 키", "[red]미설정[/red]")
+
+        # 모델
+        if models:
+            models_display = f"[green]{len(models)}개 등록[/green]"
         else:
-            period_str = f"최근 {period_settings['days']}일"
-        info_table.add_row("검색 기간", f"[yellow]{period_str}[/yellow]")
-        
+            models_display = "[dim]없음[/dim]"
+        info_table.add_row("모델", models_display)
+
+        # 날짜 범위
+        info_table.add_row("조회 기간", date_range_display)
+
         console.print(info_table)
         console.print()
 
@@ -592,100 +735,199 @@ def show_invoice_menu() -> Optional[Dict[str, Any]]:
         menu_table = Table(show_header=False, box=None, padding=(0, 2))
         menu_table.add_column("번호", style="bold cyan", width=4)
         menu_table.add_column("메뉴", style="white")
-        
-        menu_table.add_row("1", "Invoice 조회 및 Notion 저장")
-        menu_table.add_row("2", "검색 키워드 추가")
-        menu_table.add_row("3", "검색 키워드 삭제")
-        menu_table.add_row("4", "검색 기간 설정")
-        menu_table.add_row("5", "뒤로 가기")
-        
+
+        menu_table.add_row("1", "모델 관리")
+        menu_table.add_row("2", "날짜 범위 설정")
+        menu_table.add_row("3", "[bold green]조회 실행[/bold green]")
+        menu_table.add_row("0", "[dim]뒤로 가기[/dim]")
+
         console.print(menu_table)
 
         try:
-            choice = Prompt.ask("\n[cyan]선택[/cyan]", choices=["1", "2", "3", "4", "5"])
-            
+            choice = Prompt.ask("\n[cyan]선택[/cyan]", choices=["0", "1", "2", "3"])
+
             if choice == "1":
-                # Invoice 조회 실행
-                if not invoice_keywords_list:
-                    console.print("[red]검색 키워드가 없습니다. 먼저 키워드를 추가해주세요.[/red]")
-                    continue
-                    
-                return {
-                    "action": "fetch",
-                    "start_date": period_settings["start_date"],
-                    "end_date": period_settings["end_date"],
-                    "days": period_settings["days"]
-                }
+                show_model_menu()
             elif choice == "2":
-                # 검색 키워드 추가
+                date_settings = show_date_range_menu(args)
+                # args에 반영
+                if date_settings.get("preset"):
+                    args.preset = date_settings["preset"]
+                    args.start_date = None
+                    args.end_date = None
+                elif date_settings.get("start_date"):
+                    args.preset = None
+                    args.start_date = date_settings["start_date"]
+                    args.end_date = date_settings.get("end_date")
+            elif choice == "3":
+                # 조회 실행
+                return {"action": "query"}
+            elif choice == "0":
+                return None
+
+        except KeyboardInterrupt:
+            return None
+        except Exception as e:
+            console.print(f"[red]오류: {e}[/red]")
+
+
+def show_invoice_keyword_menu() -> None:
+    """Invoice 검색 키워드 설정 메뉴"""
+    while True:
+        console.print()
+        console.print("[bold cyan]>> 검색 키워드 설정[/bold cyan]")
+        console.print("[dim]" + "─" * 50 + "[/dim]")
+        console.print()
+
+        # 현재 키워드 목록
+        keywords_list = config.get_invoice_search_keywords()
+
+        if keywords_list:
+            keyword_table = Table(show_header=True, box=box.SIMPLE, border_style="cyan")
+            keyword_table.add_column("번호", style="cyan", width=6)
+            keyword_table.add_column("키워드", style="white")
+
+            for idx, kw in enumerate(keywords_list, 1):
+                keyword_table.add_row(str(idx), kw)
+
+            console.print(keyword_table)
+        else:
+            console.print("[dim]등록된 키워드가 없습니다.[/dim]")
+
+        console.print()
+
+        # 메뉴 옵션
+        menu_table = Table(show_header=False, box=None, padding=(0, 2))
+        menu_table.add_column("번호", style="bold cyan", width=4)
+        menu_table.add_column("메뉴", style="white")
+
+        menu_table.add_row("1", "키워드 추가")
+        if keywords_list:
+            menu_table.add_row("2", "키워드 삭제")
+        else:
+            menu_table.add_row("2", "[dim]키워드 삭제[/dim]")
+        menu_table.add_row("0", "[dim]뒤로 가기[/dim]")
+
+        console.print(menu_table)
+
+        try:
+            choice = Prompt.ask("\n[cyan]선택[/cyan]", choices=["0", "1", "2"])
+
+            if choice == "1":
+                # 키워드 추가
                 console.print()
-                console.print("[bold cyan]검색 키워드 추가[/bold cyan]")
-                console.print("[dim]" + "─" * 50 + "[/dim]")
-                console.print()
-                console.print("[dim]예: Your Replit receipt, AWS Invoice, etc.[/dim]")
+                console.print("[dim]예: Your Replit receipt, AWS Invoice[/dim]")
                 new_keyword = Prompt.ask("[cyan]추가할 검색 키워드[/cyan]").strip()
-                
+
                 if new_keyword:
-                    if new_keyword in invoice_keywords_list:
+                    if new_keyword in keywords_list:
                         console.print(f"[yellow]'{new_keyword}'는 이미 등록되어 있습니다.[/yellow]")
                     else:
-                        invoice_keywords_list.append(new_keyword)
-                        config.save_invoice_search_keywords(invoice_keywords_list)
+                        keywords_list.append(new_keyword)
+                        config.save_invoice_search_keywords(keywords_list)
                         console.print(f"[green]✓ '{new_keyword}'가 추가되었습니다.[/green]")
                 else:
                     console.print("[red]키워드를 입력해주세요.[/red]")
-                    
-            elif choice == "3":
-                # 검색 키워드 삭제
-                if not invoice_keywords_list:
+
+            elif choice == "2":
+                # 키워드 삭제
+                if not keywords_list:
                     console.print("[yellow]삭제할 키워드가 없습니다.[/yellow]")
                     continue
-                
-                console.print()
-                console.print("[bold yellow]검색 키워드 삭제[/bold yellow]")
-                console.print("[dim]" + "─" * 50 + "[/dim]")
-                console.print()
-                
-                # 키워드 목록 표시
-                keyword_table = Table(show_header=False, box=None, padding=(0, 2))
-                keyword_table.add_column("번호", style="bold cyan", width=4)
-                keyword_table.add_column("키워드", style="white")
-                
-                for idx, kw in enumerate(invoice_keywords_list, 1):
-                    keyword_table.add_row(str(idx), kw)
-                
-                console.print(keyword_table)
-                
+
                 try:
-                    kw_choice = Prompt.ask("\n[yellow]삭제할 키워드 번호 (취소: 0)[/yellow]",
-                                          choices=["0"] + [str(i) for i in range(1, len(invoice_keywords_list) + 1)])
-                    
-                    if kw_choice != "0":
-                        deleted = invoice_keywords_list.pop(int(kw_choice) - 1)
-                        config.save_invoice_search_keywords(invoice_keywords_list)
-                        console.print(f"[green]✓ '{deleted}'가 삭제되었습니다.[/green]")
+                    kw_choice = Prompt.ask("\n[yellow]삭제할 키워드 번호[/yellow]",
+                                          choices=[str(i) for i in range(1, len(keywords_list) + 1)])
+
+                    deleted = keywords_list.pop(int(kw_choice) - 1)
+                    config.save_invoice_search_keywords(keywords_list)
+                    console.print(f"[green]✓ '{deleted}'가 삭제되었습니다.[/green]")
                 except (ValueError, IndexError):
                     console.print("[red]올바른 번호를 선택해주세요.[/red]")
-                    
-            elif choice == "4":
+
+            elif choice == "0":
+                break
+
+        except KeyboardInterrupt:
+            break
+        except Exception as e:
+            console.print(f"[red]오류: {e}[/red]")
+
+
+def show_invoice_menu() -> Optional[Dict[str, Any]]:
+    """Invoice 수집 메뉴"""
+    period_settings = {"start_date": None, "end_date": None, "days": 90}
+
+    while True:
+        console.print()
+        console.print("[bold yellow]>> Invoices 수집[/bold yellow]")
+        console.print("[dim]" + "─" * 50 + "[/dim]")
+        console.print()
+
+        # 현재 설정 확인
+        invoice_keywords_list = config.get_invoice_search_keywords()
+
+        # 설정 정보 표시
+        info_table = Table(show_header=False, box=None, padding=(0, 1))
+        info_table.add_column("항목", style="cyan", width=16)
+        info_table.add_column("값", style="white")
+
+        # 키워드 리스트 표시
+        if invoice_keywords_list:
+            keywords_display = ", ".join(invoice_keywords_list[:3])
+            if len(invoice_keywords_list) > 3:
+                keywords_display += f" 외 {len(invoice_keywords_list) - 3}개"
+            info_table.add_row("검색 키워드", f"[green]{keywords_display}[/green]")
+        else:
+            info_table.add_row("검색 키워드", "[dim]없음[/dim]")
+
+        # 검색 기간 표시
+        if period_settings["start_date"]:
+            period_str = f"{period_settings['start_date']} ~ {period_settings.get('end_date', '현재')}"
+        else:
+            period_str = f"최근 {period_settings['days']}일"
+        info_table.add_row("검색 기간", f"[yellow]{period_str}[/yellow]")
+
+        console.print(info_table)
+        console.print()
+
+        # 메뉴 옵션
+        menu_table = Table(show_header=False, box=None, padding=(0, 2))
+        menu_table.add_column("번호", style="bold cyan", width=4)
+        menu_table.add_column("메뉴", style="white")
+
+        menu_table.add_row("1", "검색 키워드 설정 [dim](추가/삭제)[/dim]")
+        menu_table.add_row("2", "검색 기간 설정")
+        menu_table.add_row("3", "[bold yellow]조회 실행[/bold yellow]")
+        menu_table.add_row("0", "[dim]뒤로 가기[/dim]")
+
+        console.print(menu_table)
+
+        try:
+            choice = Prompt.ask("\n[cyan]선택[/cyan]", choices=["0", "1", "2", "3"])
+
+            if choice == "1":
+                # 검색 키워드 설정 서브메뉴
+                show_invoice_keyword_menu()
+            elif choice == "2":
                 # 검색 기간 설정
                 console.print()
-                console.print("[bold magenta]📅 검색 기간 설정[/bold magenta]")
+                console.print("[bold magenta]>> 검색 기간 설정[/bold magenta]")
                 console.print("[dim]" + "─" * 50 + "[/dim]")
                 console.print()
-                
+
                 period_menu = Table(show_header=False, box=None, padding=(0, 2))
                 period_menu.add_column("번호", style="bold cyan", width=4)
                 period_menu.add_column("메뉴", style="white")
-                
+
                 period_menu.add_row("1", "최근 N일")
                 period_menu.add_row("2", "시작/종료 날짜 직접 입력")
-                period_menu.add_row("3", "취소")
-                
+                period_menu.add_row("0", "취소")
+
                 console.print(period_menu)
-                
-                period_choice = Prompt.ask("\n[cyan]선택[/cyan]", choices=["1", "2", "3"])
-                
+
+                period_choice = Prompt.ask("\n[cyan]선택[/cyan]", choices=["0", "1", "2"])
+
                 if period_choice == "1":
                     console.print()
                     days_input = Prompt.ask("[cyan]최근 며칠[/cyan]", default=str(period_settings["days"]))
@@ -700,7 +942,7 @@ def show_invoice_menu() -> Optional[Dict[str, Any]]:
                             console.print("[red]양수를 입력해주세요.[/red]")
                     except ValueError:
                         console.print("[red]올바른 숫자를 입력해주세요.[/red]")
-                        
+
                 elif period_choice == "2":
                     console.print()
                     console.print("[dim]형식: YYYY-MM-DD[/dim]")
@@ -712,8 +954,20 @@ def show_invoice_menu() -> Optional[Dict[str, Any]]:
                         console.print(f"[green]✓ 검색 기간이 {start} ~ {end if end else '현재'}로 설정되었습니다.[/green]")
                     else:
                         console.print("[red]시작 날짜를 입력해주세요.[/red]")
-                        
-            elif choice == "5":
+
+            elif choice == "3":
+                # Invoice 조회 실행
+                if not invoice_keywords_list:
+                    console.print("[red]검색 키워드가 없습니다. 먼저 키워드를 추가해주세요.[/red]")
+                    continue
+
+                return {
+                    "action": "fetch",
+                    "start_date": period_settings["start_date"],
+                    "end_date": period_settings["end_date"],
+                    "days": period_settings["days"]
+                }
+            elif choice == "0":
                 return None
                 
         except KeyboardInterrupt:

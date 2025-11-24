@@ -251,7 +251,7 @@ def execute_query(
             timeframe=args.timeframe,
             timezone=timezone,
             bound_to_timeframe=args.bound_to_timeframe,
-            include_notion=args.notion
+            include_notion=False
         )
 
         console.print("[green]✓ 데이터 조회 완료[/green]")
@@ -262,11 +262,40 @@ def execute_query(
         # 테이블 형식 출력
         formatter.format_for_display(usage_data)
 
-        # 4단계: Notion 저장
-        if args.notion:
-            console.print()
+        # 4단계: Notion 저장 확인
+        console.print()
+        save_choice = Prompt.ask(
+            "[cyan]Notion에 저장하시겠습니까?[/cyan]",
+            choices=["y", "n"],
+            default="y"
+        )
+
+        if save_choice.lower() == "y":
+            # Notion API 키 확인
+            notion_api_key = config.get_notion_api_key(args.notion_api_key)
+            if not notion_api_key:
+                console.print("[red]Notion API 키가 설정되지 않았습니다.[/red]")
+                console.print("[yellow]메뉴에서 '공통 설정 > API 키 설정'을 선택하여 API 키를 설정해주세요.[/yellow]")
+                return
+
+            # fal_ai 데이터베이스 ID 확인
+            fal_ai_db_id = config.get_fal_ai_database_id()
+            if not fal_ai_db_id:
+                console.print("[red]fal.ai Notion 데이터베이스 ID가 설정되지 않았습니다.[/red]")
+                console.print("[yellow]메뉴에서 '공통 설정 > Notion DB 설정'을 선택하여 fal_ai DB ID를 설정해주세요.[/yellow]")
+                return
+
+            # 중복 업데이트 옵션
+            update_existing = Prompt.ask(
+                "[cyan]중복된 데이터를 업데이트하시겠습니까?[/cyan]",
+                choices=["y", "n"],
+                default="n"
+            ).lower() == "y"
+
             console.print("[cyan]⏳ Notion에 저장 중...[/cyan]")
-            save_to_notion(usage_data, args.notion_api_key, args.notion_database_id, args.dry_run, args.verbose, args.update_existing)
+            save_to_notion(usage_data, args.notion_api_key, None, args.dry_run, args.verbose, update_existing)
+        else:
+            console.print("[yellow]저장을 취소했습니다.[/yellow]")
 
         console.print()
         console.print("[green]✓ 모든 작업 완료[/green]")
@@ -322,42 +351,28 @@ def main():
 
 def interactive_mode(args) -> None:
     """인터랙티브 모드"""
-    date_settings = {}
-
     while True:
         choice = cli_menus.show_main_menu()
 
-        if choice == 1:
-            cli_menus.show_model_menu()
+        if choice == 0:
+            # 종료
+            console.print("\n[yellow]프로그램을 종료합니다.[/yellow]")
+            break
+        elif choice == 1:
+            # 공통 설정
+            cli_menus.show_common_settings_menu()
         elif choice == 2:
-            date_settings = cli_menus.show_date_range_menu(args)
-            # args에 반영
-            if date_settings.get("preset"):
-                args.preset = date_settings["preset"]
-                args.start_date = None
-                args.end_date = None
-            elif date_settings.get("start_date"):
-                args.preset = None
-                args.start_date = date_settings["start_date"]
-                args.end_date = date_settings.get("end_date")
+            # fal ai 사용량 추적
+            fal_result = cli_menus.show_fal_ai_menu(args)
+            if fal_result and fal_result.get("action") == "query":
+                validate_and_execute_query(args)
+                Prompt.ask("\n[dim]계속하려면 엔터를 누르세요[/dim]", default="")
         elif choice == 3:
-            cli_menus.show_api_key_menu()
-        elif choice == 4:
-            cli_menus.show_notion_menu()
-        elif choice == 5:
-            cli_menus.show_notion_save_menu(args)
-        elif choice == 6:
-            validate_and_execute_query(args)
-            Prompt.ask("\n[dim]계속하려면 엔터를 누르세요[/dim]", default="")
-        elif choice == 7:
-            # Invoice 관리
+            # invoices 수집
             invoice_result = cli_menus.show_invoice_menu()
             if invoice_result and invoice_result.get("action") == "fetch":
                 execute_invoice_query(invoice_result, args)
                 Prompt.ask("\n[dim]계속하려면 엔터를 누르세요[/dim]", default="")
-        elif choice == 8:
-            console.print("\n[yellow]프로그램을 종료합니다.[/yellow]")
-            break
 
 
 def execute_invoice_query(invoice_settings: Dict[str, Any], args) -> None:
@@ -394,9 +409,12 @@ def execute_invoice_query(invoice_settings: Dict[str, Any], args) -> None:
         if not invoices:
             console.print("[yellow]⚠ 검색된 Invoice가 없습니다.[/yellow]")
             return
-        
+
         console.print(f"[green]✓ {len(invoices)}개 Invoice 발견[/green]")
-        
+
+        # 테이블 형식으로 결과 표시
+        formatter.format_invoices_for_display(invoices)
+
         # Notion 저장 확인
         console.print()
         save_choice = Prompt.ask(

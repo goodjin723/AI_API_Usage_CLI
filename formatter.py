@@ -2,7 +2,7 @@
 데이터 출력 및 포맷팅
 CLI 테이블 형식 출력
 """
-from typing import Dict, Any
+from typing import Dict, Any, List
 from datetime import datetime
 from rich.console import Console
 from rich.table import Table
@@ -172,4 +172,84 @@ def format_for_display(
     print_summary_table(calculated_data)
     print_model_table(calculated_data)
     print_auth_method_table(calculated_data)
+
+
+def format_invoices_for_display(invoices: List[Dict[str, Any]]) -> None:
+    """
+    Invoice 데이터를 테이블 형식으로 출력
+
+    Args:
+        invoices: Invoice 데이터 리스트
+    """
+    if not invoices:
+        console.print("[yellow]조회된 Invoice가 없습니다.[/yellow]")
+        return
+
+    # 서비스별로 그룹화
+    by_service = {}
+    total_amount = 0.0
+
+    for invoice in invoices:
+        service = invoice.get("service", "Unknown")
+        amount = invoice.get("amount", 0.0)
+        total_amount += amount
+
+        if service not in by_service:
+            by_service[service] = {
+                "invoices": [],
+                "total": 0.0
+            }
+
+        by_service[service]["invoices"].append(invoice)
+        by_service[service]["total"] += amount
+
+    console.print()
+
+    # 전체 요약
+    summary_table = Table(title="[bold green]Invoice 조회 결과[/bold green]", show_header=True, header_style="bold magenta")
+    summary_table.add_column("항목", style="cyan", no_wrap=True)
+    summary_table.add_column("값", style="green", justify="right")
+
+    summary_table.add_row("총 Invoice 수", str(len(invoices)))
+    summary_table.add_row("서비스 수", str(len(by_service)))
+    summary_table.add_row("총 금액", f"${total_amount:,.2f}")
+
+    console.print(summary_table)
+    console.print()
+
+    # 서비스별 상세 내역 (비용 순으로 정렬)
+    detail_table = Table(title="[bold green]서비스별 상세 내역[/bold green]", show_header=True, header_style="bold magenta")
+    detail_table.add_column("서비스", style="cyan", no_wrap=True, width=20)
+    detail_table.add_column("날짜", style="yellow", width=15)
+    detail_table.add_column("금액", style="green", justify="right", width=15)
+
+    # 서비스별 총액 순으로 정렬
+    sorted_services = sorted(by_service.items(), key=lambda x: x[1]["total"], reverse=True)
+
+    for service, data in sorted_services:
+        # 해당 서비스의 invoice들을 날짜순으로 정렬
+        sorted_invoices = sorted(data["invoices"], key=lambda x: x.get("date", ""))
+
+        for idx, invoice in enumerate(sorted_invoices):
+            service_name = service if idx == 0 else ""
+            date = invoice.get("date", "N/A")
+            amount = invoice.get("amount", 0.0)
+
+            detail_table.add_row(
+                service_name,
+                date,
+                f"${amount:,.2f}"
+            )
+
+        # 서비스별 소계 추가
+        if len(sorted_invoices) > 1:
+            detail_table.add_row(
+                "",
+                "[bold]소계[/bold]",
+                f"[bold]${data['total']:,.2f}[/bold]"
+            )
+            detail_table.add_row("", "", "")  # 빈 줄 추가
+
+    console.print(detail_table)
+    console.print()
 
