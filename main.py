@@ -149,68 +149,62 @@ def save_to_notion(
             for auth_method, records in notion_data_by_auth.items():
                 console.print(f"  - {auth_method}: {len(records)}개 레코드")
 
+        # 통합 데이터베이스 ID 가져오기 (모든 auth_method에 대해 하나의 DB 사용)
+        database_id = None
+        if cli_database_map:
+            # CLI에서 "__all__" 키가 있으면 사용
+            if "__all__" in cli_database_map:
+                database_id = cli_database_map["__all__"]
+            # 또는 첫 번째 키의 값 사용
+            elif cli_database_map:
+                database_id = list(cli_database_map.values())[0]
+
+        # CLI에 없으면 config.json에서 통합 DB 가져오기
+        if not database_id:
+            database_id = config.get_fal_ai_database_id()
+
+        # 데이터베이스 ID가 없으면 오류
+        if not database_id:
+            console.print("\n[red]fal.ai 통합 Notion 데이터베이스 ID가 설정되지 않았습니다.[/red]")
+            console.print("[cyan]해결 방법:[/cyan]")
+            console.print("[dim]  1. 인터랙티브 메뉴에서 '4. Notion 설정' > '2. 데이터베이스 ID 추가/수정' 선택[/dim]")
+            console.print("[dim]  2. 키 별칭에 'fal_ai' 입력[/dim]")
+            console.print("[dim]  3. 통합 데이터베이스 ID 입력[/dim]")
+            total_skipped = sum(len(records) for records in notion_data_by_auth.values())
+            return
+
+        # 데이터베이스 존재 여부 확인 (한 번만)
+        if verbose:
+            console.print(f"[dim][DEBUG] 통합 데이터베이스 ID 확인 중: {database_id}[/dim]")
+        if not notion.check_database_exists(database_id, verbose=verbose):
+            console.print(f"\n[red]통합 데이터베이스(ID: {database_id})를 찾을 수 없습니다.[/red]")
+            total_skipped = sum(len(records) for records in notion_data_by_auth.values())
+            return
+
+        # 모든 auth_method의 데이터를 하나의 DB에 저장
+        if verbose:
+            total_records = sum(len(records) for records in notion_data_by_auth.values())
+            console.print(f"\n[cyan]통합 데이터베이스에 저장 중... (총 {total_records}개 레코드)[/cyan]")
+        if update_existing:
+            console.print(f"[yellow]중복 데이터 발견 시 업데이트 모드[/yellow]")
+        else:
+            console.print(f"[yellow]중복 데이터 발견 시 스킵 모드 (중복 방지)[/yellow]")
+
+        # 모든 레코드를 하나의 리스트로 합치기
+        all_records = []
         for auth_method, records in notion_data_by_auth.items():
             if verbose:
-                console.print(f"\n[dim][DEBUG] 처리 중인 auth_method: '{auth_method}' ({len(records)}개 레코드)[/dim]")
+                console.print(f"[dim][DEBUG] '{auth_method}': {len(records)}개 레코드 추가[/dim]")
+            all_records.extend(records)
 
-            # 데이터베이스 ID 가져오기 (우선순위: CLI 맵 > CLI 공통 > config.json)
-            database_id = None
-            if cli_database_map:
-                # 1. 해당 auth_method의 database_id가 CLI 맵에 있는지 확인
-                if auth_method in cli_database_map:
-                    database_id = cli_database_map[auth_method]
-                # 2. "__all__" 키가 있으면 모든 auth_method에 적용
-                elif "__all__" in cli_database_map:
-                    database_id = cli_database_map["__all__"]
+        # 통합 DB에 저장
+        stats = notion.save_usage_data(database_id, all_records, update_existing=update_existing, verbose=verbose)
+        total_created = stats["created"]
+        total_updated = stats["updated"]
+        total_skipped = stats["skipped"]
 
-            # 3. CLI에 없으면 config.json에서 가져오기
-            if not database_id:
-                database_id = config.get_notion_database_id(auth_method)
-
-            # 데이터베이스 ID가 없으면 등록된 모든 데이터베이스 확인
-            if not database_id:
-                all_databases = config.get_all_notion_databases()
-
-                # 등록된 데이터베이스가 하나만 있으면 자동으로 사용
-                if len(all_databases) == 1:
-                    database_id = list(all_databases.values())[0]
-                    if verbose:
-                        console.print(f"[yellow]'{auth_method}'의 데이터베이스 ID가 없어서 유일한 데이터베이스를 사용합니다.[/yellow]")
-                else:
-                    if verbose:
-                        console.print(f"[yellow][WARNING] '{auth_method}'의 Notion 데이터베이스 ID가 설정되지 않았습니다.[/yellow]")
-                        console.print(f"[dim]          등록된 데이터베이스 키: {list(all_databases.keys())}[/dim]")
-                        console.print(f"[dim]          {len(records)}개 레코드가 스킵되었습니다.[/dim]")
-                        console.print(f"\n[cyan]해결 방법:[/cyan]")
-                        console.print(f"[dim]          1. 인터랙티브 메뉴에서 '4. Notion 설정' > '2. 데이터베이스 ID 추가/수정' 선택[/dim]")
-                        console.print(f"[dim]          2. 키 별칭에 '{auth_method}' 입력[/dim]")
-                        console.print(f"[dim]          3. 해당 데이터베이스 ID 입력[/dim]")
-                    total_skipped += len(records)
-                    continue
-
-            # 데이터베이스 존재 여부 확인
-            if verbose:
-                console.print(f"[dim][DEBUG] 데이터베이스 ID 확인 중: {database_id}[/dim]")
-            if not notion.check_database_exists(database_id, verbose=verbose):
-                console.print(f"\n[red]'{auth_method}'의 데이터베이스(ID: {database_id})를 찾을 수 없습니다.[/red]")
-                total_skipped += len(records)
-                continue
-
-            # 데이터 저장
-            if verbose:
-                console.print(f"\n[cyan]'{auth_method}' 데이터베이스에 저장 중... ({len(records)}개 레코드)[/cyan]")
-            if update_existing:
-                console.print(f"[yellow]중복 데이터 발견 시 업데이트 모드[/yellow]")
-            else:
-                console.print(f"[yellow]중복 데이터 발견 시 스킵 모드 (중복 방지)[/yellow]")
-
-            stats = notion.save_usage_data(database_id, records, update_existing=update_existing, verbose=verbose)
-            total_created += stats["created"]
-            total_updated += stats["updated"]
-            total_skipped += stats["skipped"]
-
-            if verbose:
-                console.print(f"[green]생성: {stats['created']}, 업데이트: {stats['updated']}, 스킵: {stats['skipped']}[/green]")
+        if verbose:
+            console.print(f"[green]생성: {stats['created']}, 업데이트: {stats['updated']}, 스킵: {stats['skipped']}[/green]")
 
         console.print(f"\n[green]✓ Notion 저장 완료 (생성: {total_created}, 업데이트: {total_updated}, 스킵: {total_skipped})[/green]")
 

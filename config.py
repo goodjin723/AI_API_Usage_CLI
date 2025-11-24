@@ -132,6 +132,32 @@ def get_all_notion_databases() -> Dict[str, str]:
     return config.get("notion_databases", {})
 
 
+def get_fal_ai_database_id() -> Optional[str]:
+    """
+    fal.ai 통합 Notion 데이터베이스 ID 가져오기
+    우선순위: "fal_ai" 키 > 기존 키 중 하나 (하위 호환성)
+    """
+    config = get_config()
+    notion_databases = config.get("notion_databases", {})
+    
+    # "fal_ai" 키가 있으면 우선 사용
+    if "fal_ai" in notion_databases:
+        return notion_databases["fal_ai"]
+    
+    # 하위 호환성: 기존 키 중 하나라도 있으면 첫 번째 것 사용
+    # (invoice 제외)
+    for key, db_id in notion_databases.items():
+        if key != "invoice" and not key.startswith("invoice_"):
+            return db_id
+    
+    return None
+
+
+def save_fal_ai_database_id(database_id: str) -> None:
+    """fal.ai 통합 Notion 데이터베이스 ID 저장"""
+    save_notion_database_id("fal_ai", database_id)
+
+
 def get_notion_api_key(cli_notion_api_key: Optional[str] = None) -> Optional[str]:
     """
     Notion API 키 가져오기
