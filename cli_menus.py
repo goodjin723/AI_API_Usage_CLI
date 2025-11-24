@@ -564,14 +564,19 @@ def show_invoice_menu() -> Optional[Dict[str, Any]]:
         console.print()
 
         # 현재 설정 확인
-        invoice_keywords = config.get_invoice_search_keywords()
+        invoice_keywords_list = config.get_invoice_search_keywords()
         
         # 설정 정보 표시
         info_table = Table(show_header=False, box=None, padding=(0, 1))
         info_table.add_column("항목", style="cyan", width=16)
         info_table.add_column("값", style="white")
         
-        info_table.add_row("검색 키워드", f"[green]{invoice_keywords}[/green]")
+        # 키워드 리스트 표시
+        if invoice_keywords_list:
+            keywords_display = "\n".join([f"  • {kw}" for kw in invoice_keywords_list])
+            info_table.add_row("검색 키워드", f"[green]({len(invoice_keywords_list)}개)\n{keywords_display}[/green]")
+        else:
+            info_table.add_row("검색 키워드", "[dim]없음[/dim]")
         
         # 검색 기간 표시
         if period_settings["start_date"]:
@@ -589,17 +594,22 @@ def show_invoice_menu() -> Optional[Dict[str, Any]]:
         menu_table.add_column("메뉴", style="white")
         
         menu_table.add_row("1", "Invoice 조회 및 Notion 저장")
-        menu_table.add_row("2", "검색 키워드 변경")
-        menu_table.add_row("3", "검색 기간 설정")
-        menu_table.add_row("4", "뒤로 가기")
+        menu_table.add_row("2", "검색 키워드 추가")
+        menu_table.add_row("3", "검색 키워드 삭제")
+        menu_table.add_row("4", "검색 기간 설정")
+        menu_table.add_row("5", "뒤로 가기")
         
         console.print(menu_table)
 
         try:
-            choice = Prompt.ask("\n[cyan]선택[/cyan]", choices=["1", "2", "3", "4"])
+            choice = Prompt.ask("\n[cyan]선택[/cyan]", choices=["1", "2", "3", "4", "5"])
             
             if choice == "1":
                 # Invoice 조회 실행
+                if not invoice_keywords_list:
+                    console.print("[red]검색 키워드가 없습니다. 먼저 키워드를 추가해주세요.[/red]")
+                    continue
+                    
                 return {
                     "action": "fetch",
                     "start_date": period_settings["start_date"],
@@ -607,17 +617,57 @@ def show_invoice_menu() -> Optional[Dict[str, Any]]:
                     "days": period_settings["days"]
                 }
             elif choice == "2":
-                # 검색 키워드 변경
+                # 검색 키워드 추가
                 console.print()
-                console.print("[cyan]현재 키워드:[/cyan]", invoice_keywords)
+                console.print("[bold cyan]검색 키워드 추가[/bold cyan]")
+                console.print("[dim]" + "─" * 50 + "[/dim]")
+                console.print()
                 console.print("[dim]예: Your Replit receipt, AWS Invoice, etc.[/dim]")
-                new_keywords = Prompt.ask("[cyan]새 검색 키워드[/cyan]").strip()
-                if new_keywords:
-                    config.save_invoice_search_keywords(new_keywords)
-                    console.print(f"[green]✓ 검색 키워드가 '{new_keywords}'로 변경되었습니다.[/green]")
+                new_keyword = Prompt.ask("[cyan]추가할 검색 키워드[/cyan]").strip()
+                
+                if new_keyword:
+                    if new_keyword in invoice_keywords_list:
+                        console.print(f"[yellow]'{new_keyword}'는 이미 등록되어 있습니다.[/yellow]")
+                    else:
+                        invoice_keywords_list.append(new_keyword)
+                        config.save_invoice_search_keywords(invoice_keywords_list)
+                        console.print(f"[green]✓ '{new_keyword}'가 추가되었습니다.[/green]")
                 else:
                     console.print("[red]키워드를 입력해주세요.[/red]")
+                    
             elif choice == "3":
+                # 검색 키워드 삭제
+                if not invoice_keywords_list:
+                    console.print("[yellow]삭제할 키워드가 없습니다.[/yellow]")
+                    continue
+                
+                console.print()
+                console.print("[bold yellow]검색 키워드 삭제[/bold yellow]")
+                console.print("[dim]" + "─" * 50 + "[/dim]")
+                console.print()
+                
+                # 키워드 목록 표시
+                keyword_table = Table(show_header=False, box=None, padding=(0, 2))
+                keyword_table.add_column("번호", style="bold cyan", width=4)
+                keyword_table.add_column("키워드", style="white")
+                
+                for idx, kw in enumerate(invoice_keywords_list, 1):
+                    keyword_table.add_row(str(idx), kw)
+                
+                console.print(keyword_table)
+                
+                try:
+                    kw_choice = Prompt.ask("\n[yellow]삭제할 키워드 번호 (취소: 0)[/yellow]",
+                                          choices=["0"] + [str(i) for i in range(1, len(invoice_keywords_list) + 1)])
+                    
+                    if kw_choice != "0":
+                        deleted = invoice_keywords_list.pop(int(kw_choice) - 1)
+                        config.save_invoice_search_keywords(invoice_keywords_list)
+                        console.print(f"[green]✓ '{deleted}'가 삭제되었습니다.[/green]")
+                except (ValueError, IndexError):
+                    console.print("[red]올바른 번호를 선택해주세요.[/red]")
+                    
+            elif choice == "4":
                 # 검색 기간 설정
                 console.print()
                 console.print("[bold magenta]📅 검색 기간 설정[/bold magenta]")
@@ -663,7 +713,7 @@ def show_invoice_menu() -> Optional[Dict[str, Any]]:
                     else:
                         console.print("[red]시작 날짜를 입력해주세요.[/red]")
                         
-            elif choice == "4":
+            elif choice == "5":
                 return None
                 
         except KeyboardInterrupt:

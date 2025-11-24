@@ -17,5 +17,8 @@
   "openai_api_key": "YOUR_OPENAI_API_KEY_HERE",
   "google_credentials_path": "./credentials.json",
   "google_tokens_path": "./google_tokens.json",
-  "invoice_search_keywords": "Your Replit receipt"
+  "invoice_search_keywords": [
+    "Your Replit receipt",
+    "AWS Invoice"
+  ]
 }

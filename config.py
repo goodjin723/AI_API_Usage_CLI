@@ -208,17 +208,35 @@ def save_google_paths(credentials_path: str, tokens_path: str) -> None:
     save_config(config_data)
 
 
-def get_invoice_search_keywords() -> str:
+def get_invoice_search_keywords() -> List[str]:
     """
-    Gmail invoice 검색 키워드 가져오기
+    Gmail invoice 검색 키워드 가져오기 (리스트)
     우선순위: config.json > 기본값 (Replit)
+    
+    Returns:
+        List[str]: 검색 키워드 리스트
     """
     config_data = get_config()
-    return config_data.get("invoice_search_keywords", "Your Replit receipt")
+    keywords = config_data.get("invoice_search_keywords", ["Your Replit receipt"])
+    
+    # 하위 호환성: 문자열이면 리스트로 변환
+    if isinstance(keywords, str):
+        return [keywords]
+    
+    # 리스트가 아니거나 비어있으면 기본값
+    if not isinstance(keywords, list) or not keywords:
+        return ["Your Replit receipt"]
+    
+    return keywords
 
 
-def save_invoice_search_keywords(keywords: str) -> None:
-    """Gmail invoice 검색 키워드를 config.json에 저장"""
+def save_invoice_search_keywords(keywords: List[str]) -> None:
+    """
+    Gmail invoice 검색 키워드를 config.json에 저장
+    
+    Args:
+        keywords: 검색 키워드 리스트
+    """
     config_data = get_config()
     config_data["invoice_search_keywords"] = keywords
     save_config(config_data)

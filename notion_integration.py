@@ -598,6 +598,7 @@ class NotionClient:
         period: str,
         service: str,
         email_subject: str,
+        paid_status: str = "Paid",
         verbose: bool = False
     ) -> Optional[str]:
         """
@@ -605,13 +606,14 @@ class NotionClient:
         
         Args:
             database_id: Notion 데이터베이스 ID
-            invoice_id: Invoice ID
-            date: 날짜 (YYYY-MM-DD)
-            amount: 금액
+            invoice_id: Invoice Number
+            date: Date Paid (YYYY-MM-DD)
+            amount: 금액 (USD)
             description: 설명
             period: 청구 기간
-            service: 서비스명
+            service: 서비스명 (자동으로 Select 옵션 생성됨)
             email_subject: 이메일 제목
+            paid_status: 결제 상태 (Paid, Unpaid, Pending 등, 자동으로 Status 옵션 생성됨)
             verbose: 디버그 로그 출력
         
         Returns:
@@ -629,7 +631,7 @@ class NotionClient:
             
             # 페이지 속성 구성
             properties = {
-                "Invoice ID": {
+                "Invoice Number": {
                     "title": [
                         {
                             "text": {
@@ -638,7 +640,7 @@ class NotionClient:
                         }
                     ]
                 },
-                "Date": {
+                "Date Paid": {
                     "date": {
                         "start": date_str
                     }
@@ -677,6 +679,11 @@ class NotionClient:
                             }
                         }
                     ]
+                },
+                "Paid Status": {
+                    "status": {
+                        "name": paid_status
+                    }
                 }
             }
             
@@ -686,6 +693,7 @@ class NotionClient:
                 print(f"  - Date: {date_str}")
                 print(f"  - Amount: ${amount:.2f}")
                 print(f"  - Service: {service}")
+                print(f"  - Paid Status: {paid_status}")
             
             # 페이지 생성
             response = self.client.pages.create(
@@ -713,11 +721,11 @@ class NotionClient:
         verbose: bool = False
     ) -> Optional[str]:
         """
-        기존 Invoice 페이지 찾기 (Invoice ID 기준)
+        기존 Invoice 페이지 찾기 (Invoice Number 기준)
         
         Args:
             database_id: Notion 데이터베이스 ID
-            invoice_id: Invoice ID
+            invoice_id: Invoice Number
             verbose: 디버그 로그 출력
         
         Returns:
@@ -738,7 +746,7 @@ class NotionClient:
             
             query_payload = {
                 "filter": {
-                    "property": "Invoice ID",
+                    "property": "Invoice Number",
                     "title": {
                         "equals": invoice_id
                     }
@@ -815,6 +823,7 @@ class NotionClient:
             period = invoice.get("period", "N/A")
             service = invoice.get("service", "Unknown")
             email_subject = invoice.get("email_subject", "N/A")
+            paid_status = invoice.get("paid_status", "Paid")
             
             if not invoice_id or not date:
                 if verbose:
@@ -847,6 +856,7 @@ class NotionClient:
                     period=period,
                     service=service,
                     email_subject=email_subject,
+                    paid_status=paid_status,
                     verbose=verbose
                 )
                 

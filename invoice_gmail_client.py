@@ -10,7 +10,7 @@ import google_auth
 
 
 def fetch_invoices(
-    search_keywords: Optional[str] = None,
+    search_keywords: Optional[List[str]] = None,
     model: str = "gpt-4o-mini",
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
@@ -18,10 +18,10 @@ def fetch_invoices(
     verbose: bool = False
 ) -> List[Dict[str, Any]]:
     """
-    Gmail에서 invoice 메일을 검색하고 구조화된 데이터로 추출
+    Gmail에서 invoice 메일을 검색하고 구조화된 데이터로 추출 (다중 키워드 지원)
     
     Args:
-        search_keywords: Gmail 검색 키워드 (None이면 config에서 가져옴)
+        search_keywords: Gmail 검색 키워드 리스트 (None이면 config에서 가져옴)
         model: OpenAI 모델 (gpt-4o 또는 gpt-4o-mini)
         start_date: 검색 시작 날짜 (YYYY-MM-DD, None이면 days 사용)
         end_date: 검색 종료 날짜 (YYYY-MM-DD, None이면 오늘)
@@ -29,7 +29,7 @@ def fetch_invoices(
         verbose: 상세 로그 출력
     
     Returns:
-        List[Dict]: Invoice 데이터 리스트
+        List[Dict]: Invoice 데이터 리스트 (모든 키워드의 결과 합침)
         [
             {
                 "invoice_id": "INV-2024-001",
@@ -47,6 +47,77 @@ def fetch_invoices(
         ImportError: openai 패키지가 설치되지 않은 경우
         Exception: API 호출 실패 시
     """
+    # 검색 키워드 가져오기 및 정규화
+    if search_keywords is None:
+        search_keywords = config.get_invoice_search_keywords()
+    elif isinstance(search_keywords, str):
+        # 문자열이면 리스트로 변환 (하위 호환성)
+        search_keywords = [search_keywords]
+    
+    if not search_keywords:
+        raise ValueError("검색 키워드가 비어있습니다.")
+    
+    if verbose:
+        print(f"[DEBUG] 검색 키워드: {search_keywords} ({len(search_keywords)}개)")
+    
+    # 여러 키워드로 검색
+    all_invoices = []
+    seen_invoice_ids = set()
+    
+    for idx, keyword in enumerate(search_keywords, 1):
+        if verbose:
+            print(f"\n{'='*60}")
+            print(f"[키워드 {idx}/{len(search_keywords)}] '{keyword}' 검색 중...")
+            print(f"{'='*60}")
+        
+        try:
+            invoices = _fetch_invoices_single_keyword(
+                keyword=keyword,
+                model=model,
+                start_date=start_date,
+                end_date=end_date,
+                days=days,
+                verbose=verbose
+            )
+            
+            # 중복 제거 (invoice_id 기준)
+            for invoice in invoices:
+                invoice_id = invoice.get("invoice_id")
+                if invoice_id not in seen_invoice_ids:
+                    seen_invoice_ids.add(invoice_id)
+                    all_invoices.append(invoice)
+                elif verbose:
+                    print(f"[DEBUG] 중복 Invoice 스킵: {invoice_id}")
+            
+            if verbose:
+                print(f"✓ '{keyword}': {len(invoices)}개 발견 (중복 제거 후 총 {len(all_invoices)}개)")
+        
+        except Exception as e:
+            print(f"[ERROR] '{keyword}' 검색 실패: {e}")
+            if verbose:
+                import traceback
+                traceback.print_exc()
+            continue
+    
+    if verbose:
+        print(f"\n{'='*60}")
+        print(f"[최종 결과] 총 {len(all_invoices)}개 Invoice (중복 제거 완료)")
+        print(f"{'='*60}\n")
+    
+    return all_invoices
+
+
+def _fetch_invoices_single_keyword(
+    keyword: str,
+    model: str,
+    start_date: Optional[str],
+    end_date: Optional[str],
+    days: int,
+    verbose: bool
+) -> List[Dict[str, Any]]:
+    """
+    단일 검색 키워드로 invoice 검색 (내부 헬퍼 함수)
+    """
     try:
         from openai import OpenAI
     except ImportError:
@@ -54,10 +125,6 @@ def fetch_invoices(
             "❌ openai 패키지가 필요합니다.\n"
             "설치: pip install openai"
         )
-    
-    # 검색 키워드 가져오기
-    if search_keywords is None:
-        search_keywords = config.get_invoice_search_keywords()
     
     # 날짜 범위 계산
     if end_date is None:
@@ -73,7 +140,6 @@ def fetch_invoices(
         start_date_obj = datetime.strptime(start_date, "%Y-%m-%d")
     
     if verbose:
-        print(f"[DEBUG] 검색 키워드: {search_keywords}")
         print(f"[DEBUG] 사용 모델: {model}")
         print(f"[DEBUG] 검색 기간: {start_date} ~ {end_date}")
     
@@ -101,7 +167,7 @@ def fetch_invoices(
     client = OpenAI(api_key=openai_api_key)
     
     # 프롬프트 생성
-    prompt = _create_extraction_prompt(search_keywords, start_date, end_date)
+    prompt = _create_extraction_prompt(keyword, start_date, end_date)
     
     if verbose:
         print(f"\n[단계 2] Gmail 메일 검색 및 분석 중...")
@@ -180,14 +246,14 @@ def fetch_invoices(
     return validated_invoices
 
 
-def _create_extraction_prompt(search_keywords: str, start_date: str, end_date: str) -> str:
+def _create_extraction_prompt(search_keyword: str, start_date: str, end_date: str) -> str:
     """Invoice 추출 프롬프트 생성"""
     # Gmail 날짜 형식으로 변환 (YYYY/MM/DD)
     gmail_start = start_date.replace("-", "/")
     gmail_end = end_date.replace("-", "/")
     
     return f"""
-Search Gmail for emails matching: "{search_keywords}"
+Search Gmail for emails matching: "{search_keyword}"
 
 Date range: after:{gmail_start} before:{gmail_end}
 
@@ -195,26 +261,29 @@ For each invoice email found, extract the following information and return as a 
 
 [
   {{
-    "invoice_id": "string (invoice/receipt number, e.g., 'INV-2024-001')",
-    "date": "YYYY-MM-DD (invoice date)",
+    "invoice_id": "string (invoice number - extract from invoice body, NOT receipt number)",
+    "date": "YYYY-MM-DD (date paid from invoice, if not found use email date)",
     "amount": number (total amount in USD, numeric only without $ symbol)",
     "description": "string (brief description of charges/services)",
     "period": "string (billing period if mentioned, e.g., 'Jan 1-31, 2024' or 'N/A')",
     "service": "string (service/company name, e.g., 'Replit', 'AWS', etc.)",
-    "email_subject": "string (original email subject line)"
+    "email_subject": "string (original email subject line)",
+    "paid_status": "string (payment status: 'Paid', 'Unpaid', 'Pending', 'Overdue', etc.)"
   }}
 ]
 
 Important extraction rules:
 1. Return ONLY valid JSON array, no markdown code blocks
 2. If no invoice emails found, return empty array: []
-3. "amount" must be a number (not string), extract numeric value only
-4. "date" must be in YYYY-MM-DD format
-5. If invoice_id is not explicitly stated, use a generated ID like "INV-YYYY-MM-DD-XXX"
-6. "period" should capture billing period if mentioned in email, otherwise use "N/A"
-7. "service" should identify the service provider from email sender or content
-8. Extract data accurately from email body, subject, and metadata
-9. Focus on invoice/receipt/billing emails only, ignore other types
+3. "invoice_id" MUST be the invoice number (not receipt number) - look for "Invoice Number:", "Invoice #:", etc. in email body
+4. If invoice number is not found, use pattern: "INV-YYYY-MM-DD" based on invoice date
+5. "amount" must be a number (not string), extract numeric value only
+6. "date" must be in YYYY-MM-DD format - use invoice date paid if available, otherwise use email sent date
+7. "period" should capture billing period if mentioned in email, otherwise use "N/A"
+8. "service" should identify the service provider from email sender or content (e.g., "Replit", "AWS", "Google Cloud")
+9. "paid_status" should determine payment status - if it's a receipt/confirmation email, use "Paid"; if it mentions "pending" or "due", use "Unpaid" or "Pending"
+10. Extract data accurately from email body, subject, and metadata
+11. Focus on invoice/receipt/billing emails only, ignore other types
 
 Return the JSON array now.
 """.strip()
@@ -262,7 +331,8 @@ def _validate_invoice(invoice: Dict[str, Any], verbose: bool = False) -> Dict[st
         "description": str(invoice.get("description", "N/A")).strip(),
         "period": str(invoice.get("period", "N/A")).strip(),
         "service": str(invoice["service"]).strip(),
-        "email_subject": str(invoice.get("email_subject", "N/A")).strip()
+        "email_subject": str(invoice.get("email_subject", "N/A")).strip(),
+        "paid_status": str(invoice.get("paid_status", "Paid")).strip()
     }
 
 
@@ -286,7 +356,8 @@ def format_for_notion(invoices: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             "description": invoice["description"],
             "period": invoice["period"],
             "service": invoice["service"],
-            "email_subject": invoice["email_subject"]
+            "email_subject": invoice["email_subject"],
+            "paid_status": invoice["paid_status"]
         }
         notion_records.append(record)
     
@@ -305,7 +376,7 @@ if __name__ == "__main__":
     try:
         # 테스트 실행 (최근 30일)
         invoices = fetch_invoices(
-            search_keywords="Your Replit receipt",
+            search_keywords=["Your Replit receipt"],
             model="gpt-4o-mini",
             days=30,
             verbose=True
@@ -321,6 +392,7 @@ if __name__ == "__main__":
             print(f"  날짜: {invoice['date']}")
             print(f"  금액: ${invoice['amount']:.2f}")
             print(f"  서비스: {invoice['service']}")
+            print(f"  결제 상태: {invoice['paid_status']}")
             print(f"  설명: {invoice['description']}")
             print(f"  기간: {invoice['period']}")
             print(f"  이메일 제목: {invoice['email_subject']}")
