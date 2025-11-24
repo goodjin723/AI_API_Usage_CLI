@@ -73,7 +73,7 @@ export NOTION_API_KEY="your-notion-api-key"    # Notion 사용 시
   "models": [
     "fal-ai/your-model-id"
   ],
-  "api_key": "your-fal-ai-admin-key",
+  "fal_ai_api_key": "your-fal-ai-admin-key",
   "openai_api_key": "your-openai-api-key",
   "notion_api_key": "your-notion-api-key",
   "notion_databases": {
@@ -179,6 +179,7 @@ invoice 첫 실행 시 브라우저가 열리면서 Google 로그인 및 권한 
 | Unit Price ($) | Number |
 | Time | Text |
 | Model List | Select |
+| Key Name | Select |
 
 
 #### Invoice 데이터베이스

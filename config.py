@@ -68,12 +68,12 @@ def get_api_key(cli_api_key: Optional[str] = None) -> Optional[str]:
     """
     if cli_api_key:
         return cli_api_key
-    
+
     config = get_config()
-    api_key = config.get("api_key")
+    api_key = config.get("fal_ai_api_key")
     if api_key:
         return api_key
-    
+
     api_key = os.getenv("FAL_ADMIN_API_KEY")
     return api_key
 
@@ -81,7 +81,7 @@ def get_api_key(cli_api_key: Optional[str] = None) -> Optional[str]:
 def save_api_key(api_key: str) -> None:
     """API 키를 config.json에 저장"""
     config = get_config()
-    config["api_key"] = api_key
+    config["fal_ai_api_key"] = api_key
     save_config(config)
 
 def save_models(models: List[str]) -> None:

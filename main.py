@@ -251,7 +251,7 @@ def execute_query(
                 timeframe=args.timeframe,
                 timezone=timezone,
                 bound_to_timeframe=args.bound_to_timeframe,
-                include_notion=False
+                include_notion=True
             )
 
         console.print("[green]✓ 데이터 조회 완료[/green]")

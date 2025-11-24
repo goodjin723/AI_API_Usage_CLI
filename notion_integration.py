@@ -333,9 +333,9 @@ class NotionClient:
                 }
             }
             
-            # API Key select 필드 추가 (있으면)
+            # Key Name select 필드 추가 (있으면)
             if api_key:
-                properties["API Key"] = {
+                properties["Key Name"] = {
                     "select": {
                         "name": api_key
                     }
@@ -363,7 +363,7 @@ class NotionClient:
                 print(f"  - Model: {model} (title 타입)")
                 print(f"  - Model List: {model} (select 타입, 자동 생성)")
                 if api_key:
-                    print(f"  - API Key: {api_key} (select 타입, 자동 생성)")
+                    print(f"  - Key Name: {api_key} (select 타입, 자동 생성)")
                 print(f"  - Requests: {requests}")
                 print(f"  - Quantity: {quantity}")
                 print(f"  - Cost: {cost}")
@@ -405,13 +405,13 @@ class NotionClient:
                 print(f"[INFO] 필드 이름이 데이터베이스에 존재하지 않습니다.")
                 required_fields = "Date, Model, Model List, Requests, Quantity, Cost ($), Unit Price ($)"
                 if api_key:
-                    required_fields += ", API Key"
+                    required_fields += ", Key Name"
                 print(f"[INFO] 필수 필드: {required_fields}")
                 print(f"[INFO] 필드 이름은 대소문자와 공백을 정확히 일치시켜야 합니다.")
             elif "validation" in error_msg.lower():
                 print(f"[INFO] 필드 타입이 올바르지 않을 수 있습니다.")
-                print(f"[INFO] Date는 Date 타입, Model은 Title 타입, Model List와 API Key는 Select 타입, Time은 Rich Text 타입, 나머지는 Number 타입이어야 합니다.")
-                print(f"[INFO] Model List와 API Key 필드가 Select 타입인지 확인하세요. 새로운 옵션은 자동으로 생성됩니다.")
+                print(f"[INFO] Date는 Date 타입, Model은 Title 타입, Model List와 Key Name는 Select 타입, Time은 Rich Text 타입, 나머지는 Number 타입이어야 합니다.")
+                print(f"[INFO] Model List와 Key Name 필드가 Select 타입인지 확인하세요. 새로운 옵션은 자동으로 생성됩니다.")
             
             return None
     
