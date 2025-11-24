@@ -32,8 +32,9 @@ def show_main_menu() -> int:
     table.add_row("3", "API 키 설정")
     table.add_row("4", "Notion 설정 [dim](API 키, 데이터베이스)[/dim]")
     table.add_row("5", "Notion 저장 옵션 [dim](저장, 업데이트)[/dim]")
-    table.add_row("6", "[bold green]조회 실행[/bold green]")
-    table.add_row("7", "[dim]종료[/dim]")
+    table.add_row("6", "[bold green]조회 실행 (fal.ai 사용량)[/bold green]")
+    table.add_row("7", "[bold yellow]Invoice 관리 (Gmail)[/bold yellow]")
+    table.add_row("8", "[dim]종료[/dim]")
 
     panel = Panel(
         table,
@@ -45,7 +46,7 @@ def show_main_menu() -> int:
 
     while True:
         try:
-            choice = Prompt.ask("\n[cyan]메뉴 선택[/cyan]", choices=["1", "2", "3", "4", "5", "6", "7"])
+            choice = Prompt.ask("\n[cyan]메뉴 선택[/cyan]", choices=["1", "2", "3", "4", "5", "6", "7", "8"])
             return int(choice)
         except KeyboardInterrupt:
             console.print("\n[yellow]프로그램을 종료합니다.[/yellow]")
@@ -324,19 +325,28 @@ def show_api_key_menu() -> None:
         console.print("[dim]" + "─" * 50 + "[/dim]")
         console.print()
 
-        api_key = config.get_api_key()
-        if api_key:
-            # 마스킹 처리
-            masked_key = api_key[:8] + "..." + api_key[-4:] if len(api_key) > 12 else "***"
-            status = f"[green]{masked_key}[/green]"
+        # fal.ai API 키 확인
+        fal_api_key = config.get_api_key()
+        if fal_api_key:
+            masked_fal = fal_api_key[:8] + "..." + fal_api_key[-4:] if len(fal_api_key) > 12 else "***"
+            fal_status = f"[green]{masked_fal}[/green]"
         else:
-            status = "[dim]등록된 API 키 없음[/dim]"
+            fal_status = "[dim]등록된 API 키 없음[/dim]"
 
-        # 현재 설정 및 메뉴
+        # OpenAI API 키 확인
+        openai_api_key = config.get_openai_api_key()
+        if openai_api_key:
+            masked_openai = openai_api_key[:8] + "..." + openai_api_key[-4:] if len(openai_api_key) > 12 else "***"
+            openai_status = f"[green]{masked_openai}[/green]"
+        else:
+            openai_status = "[dim]등록된 API 키 없음[/dim]"
+
+        # 현재 설정 표시
         info_table = Table(show_header=False, box=None, padding=(0, 1))
-        info_table.add_column("항목", style="cyan", width=12)
+        info_table.add_column("항목", style="cyan", width=16)
         info_table.add_column("값", style="white")
-        info_table.add_row("현재 API 키", status)
+        info_table.add_row("fal.ai API 키", fal_status)
+        info_table.add_row("OpenAI API 키", openai_status)
 
         console.print(info_table)
         console.print()
@@ -345,22 +355,31 @@ def show_api_key_menu() -> None:
         menu_table = Table(show_header=False, box=None, padding=(0, 2))
         menu_table.add_column("번호", style="bold cyan", width=4)
         menu_table.add_column("메뉴", style="white")
-        menu_table.add_row("1", "API 키 입력/변경")
-        menu_table.add_row("2", "뒤로 가기")
+        menu_table.add_row("1", "fal.ai API 키 입력/변경")
+        menu_table.add_row("2", "OpenAI API 키 입력/변경")
+        menu_table.add_row("3", "뒤로 가기")
 
         console.print(menu_table)
 
         try:
-            choice = Prompt.ask("\n[cyan]선택[/cyan]", choices=["1", "2"])
+            choice = Prompt.ask("\n[cyan]선택[/cyan]", choices=["1", "2", "3"])
             if choice == "1":
                 console.print()
                 api_key = Prompt.ask("[cyan]fal.ai Admin API 키[/cyan]").strip()
                 if api_key:
                     config.save_api_key(api_key)
-                    console.print("[green]✓ API 키가 저장되었습니다.[/green]")
+                    console.print("[green]✓ fal.ai API 키가 저장되었습니다.[/green]")
                 else:
                     console.print("[red]API 키를 입력해주세요.[/red]")
             elif choice == "2":
+                console.print()
+                api_key = Prompt.ask("[cyan]OpenAI API 키[/cyan]").strip()
+                if api_key:
+                    config.save_openai_api_key(api_key)
+                    console.print("[green]✓ OpenAI API 키가 저장되었습니다.[/green]")
+                else:
+                    console.print("[red]API 키를 입력해주세요.[/red]")
+            elif choice == "3":
                 break
         except KeyboardInterrupt:
             break
@@ -530,5 +549,124 @@ def show_notion_menu() -> None:
                 break
         except KeyboardInterrupt:
             break
+        except Exception as e:
+            console.print(f"[red]오류: {e}[/red]")
+
+
+def show_invoice_menu() -> Optional[Dict[str, Any]]:
+    """Invoice 관리 메뉴"""
+    period_settings = {"start_date": None, "end_date": None, "days": 90}
+    
+    while True:
+        console.print()
+        console.print("[bold yellow]📧 Invoice 관리 (Gmail)[/bold yellow]")
+        console.print("[dim]" + "─" * 50 + "[/dim]")
+        console.print()
+
+        # 현재 설정 확인
+        invoice_keywords = config.get_invoice_search_keywords()
+        
+        # 설정 정보 표시
+        info_table = Table(show_header=False, box=None, padding=(0, 1))
+        info_table.add_column("항목", style="cyan", width=16)
+        info_table.add_column("값", style="white")
+        
+        info_table.add_row("검색 키워드", f"[green]{invoice_keywords}[/green]")
+        
+        # 검색 기간 표시
+        if period_settings["start_date"]:
+            period_str = f"{period_settings['start_date']} ~ {period_settings.get('end_date', '현재')}"
+        else:
+            period_str = f"최근 {period_settings['days']}일"
+        info_table.add_row("검색 기간", f"[yellow]{period_str}[/yellow]")
+        
+        console.print(info_table)
+        console.print()
+
+        # 메뉴 옵션
+        menu_table = Table(show_header=False, box=None, padding=(0, 2))
+        menu_table.add_column("번호", style="bold cyan", width=4)
+        menu_table.add_column("메뉴", style="white")
+        
+        menu_table.add_row("1", "Invoice 조회 및 Notion 저장")
+        menu_table.add_row("2", "검색 키워드 변경")
+        menu_table.add_row("3", "검색 기간 설정")
+        menu_table.add_row("4", "뒤로 가기")
+        
+        console.print(menu_table)
+
+        try:
+            choice = Prompt.ask("\n[cyan]선택[/cyan]", choices=["1", "2", "3", "4"])
+            
+            if choice == "1":
+                # Invoice 조회 실행
+                return {
+                    "action": "fetch",
+                    "start_date": period_settings["start_date"],
+                    "end_date": period_settings["end_date"],
+                    "days": period_settings["days"]
+                }
+            elif choice == "2":
+                # 검색 키워드 변경
+                console.print()
+                console.print("[cyan]현재 키워드:[/cyan]", invoice_keywords)
+                console.print("[dim]예: Your Replit receipt, AWS Invoice, etc.[/dim]")
+                new_keywords = Prompt.ask("[cyan]새 검색 키워드[/cyan]").strip()
+                if new_keywords:
+                    config.save_invoice_search_keywords(new_keywords)
+                    console.print(f"[green]✓ 검색 키워드가 '{new_keywords}'로 변경되었습니다.[/green]")
+                else:
+                    console.print("[red]키워드를 입력해주세요.[/red]")
+            elif choice == "3":
+                # 검색 기간 설정
+                console.print()
+                console.print("[bold magenta]📅 검색 기간 설정[/bold magenta]")
+                console.print("[dim]" + "─" * 50 + "[/dim]")
+                console.print()
+                
+                period_menu = Table(show_header=False, box=None, padding=(0, 2))
+                period_menu.add_column("번호", style="bold cyan", width=4)
+                period_menu.add_column("메뉴", style="white")
+                
+                period_menu.add_row("1", "최근 N일")
+                period_menu.add_row("2", "시작/종료 날짜 직접 입력")
+                period_menu.add_row("3", "취소")
+                
+                console.print(period_menu)
+                
+                period_choice = Prompt.ask("\n[cyan]선택[/cyan]", choices=["1", "2", "3"])
+                
+                if period_choice == "1":
+                    console.print()
+                    days_input = Prompt.ask("[cyan]최근 며칠[/cyan]", default=str(period_settings["days"]))
+                    try:
+                        days = int(days_input)
+                        if days > 0:
+                            period_settings["days"] = days
+                            period_settings["start_date"] = None
+                            period_settings["end_date"] = None
+                            console.print(f"[green]✓ 검색 기간이 최근 {days}일로 설정되었습니다.[/green]")
+                        else:
+                            console.print("[red]양수를 입력해주세요.[/red]")
+                    except ValueError:
+                        console.print("[red]올바른 숫자를 입력해주세요.[/red]")
+                        
+                elif period_choice == "2":
+                    console.print()
+                    console.print("[dim]형식: YYYY-MM-DD[/dim]")
+                    start = Prompt.ask("[cyan]시작 날짜[/cyan]").strip()
+                    if start:
+                        end = Prompt.ask("[cyan]종료 날짜 [dim](엔터 시 오늘)[/dim][/cyan]", default="").strip()
+                        period_settings["start_date"] = start
+                        period_settings["end_date"] = end if end else None
+                        console.print(f"[green]✓ 검색 기간이 {start} ~ {end if end else '현재'}로 설정되었습니다.[/green]")
+                    else:
+                        console.print("[red]시작 날짜를 입력해주세요.[/red]")
+                        
+            elif choice == "4":
+                return None
+                
+        except KeyboardInterrupt:
+            return None
         except Exception as e:
             console.print(f"[red]오류: {e}[/red]")

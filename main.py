@@ -356,8 +356,105 @@ def interactive_mode(args) -> None:
             validate_and_execute_query(args)
             Prompt.ask("\n[dim]계속하려면 엔터를 누르세요[/dim]", default="")
         elif choice == 7:
+            # Invoice 관리
+            invoice_result = cli_menus.show_invoice_menu()
+            if invoice_result and invoice_result.get("action") == "fetch":
+                execute_invoice_query(invoice_result, args)
+                Prompt.ask("\n[dim]계속하려면 엔터를 누르세요[/dim]", default="")
+        elif choice == 8:
             console.print("\n[yellow]프로그램을 종료합니다.[/yellow]")
             break
+
+
+def execute_invoice_query(invoice_settings: Dict[str, Any], args) -> None:
+    """Invoice 조회 및 Notion 저장"""
+    try:
+        import invoice_gmail_client
+        
+        console.print()
+        console.print("[cyan]⏳ Invoice 조회 준비 중...[/cyan]")
+        
+        # 설정 확인
+        start_date = invoice_settings.get("start_date")
+        end_date = invoice_settings.get("end_date")
+        days = invoice_settings.get("days", 90)
+        
+        if args.verbose:
+            if start_date:
+                console.print(f"[dim]   검색 기간: {start_date} ~ {end_date or '현재'}[/dim]")
+            else:
+                console.print(f"[dim]   검색 기간: 최근 {days}일[/dim]")
+        
+        # Invoice 조회
+        console.print("[cyan]⏳ Gmail에서 Invoice 검색 중...[/cyan]")
+        
+        invoices = invoice_gmail_client.fetch_invoices(
+            search_keywords=None,  # config에서 가져옴
+            model="gpt-4o-mini",
+            start_date=start_date,
+            end_date=end_date,
+            days=days,
+            verbose=args.verbose
+        )
+        
+        if not invoices:
+            console.print("[yellow]⚠ 검색된 Invoice가 없습니다.[/yellow]")
+            return
+        
+        console.print(f"[green]✓ {len(invoices)}개 Invoice 발견[/green]")
+        
+        # Notion 저장 확인
+        console.print()
+        save_choice = Prompt.ask(
+            "[cyan]Notion에 저장하시겠습니까?[/cyan]",
+            choices=["y", "n"],
+            default="y"
+        )
+        
+        if save_choice.lower() == "y":
+            # Notion API 키 확인
+            notion_api_key = config.get_notion_api_key()
+            if not notion_api_key:
+                console.print("[red]Notion API 키가 설정되지 않았습니다.[/red]")
+                console.print("[yellow]메뉴에서 '4. Notion 설정'을 선택하여 API 키를 설정해주세요.[/yellow]")
+                return
+            
+            # Invoice 데이터베이스 ID 확인
+            invoice_db_id = config.get_notion_database_id("invoice")
+            if not invoice_db_id:
+                console.print("[red]Invoice Notion 데이터베이스 ID가 설정되지 않았습니다.[/red]")
+                console.print("[yellow]메뉴에서 '4. Notion 설정' > '2. 데이터베이스 ID 추가/수정'을 선택하세요.[/yellow]")
+                console.print("[yellow]키 별칭: 'invoice'[/yellow]")
+                return
+            
+            # Notion에 저장
+            console.print("[cyan]⏳ Notion에 저장 중...[/cyan]")
+            
+            notion = notion_integration.NotionClient(notion_api_key)
+            
+            # 중복 업데이트 옵션
+            update_existing = Prompt.ask(
+                "[cyan]중복된 Invoice를 업데이트하시겠습니까?[/cyan]",
+                choices=["y", "n"],
+                default="n"
+            ).lower() == "y"
+            
+            stats = notion.save_invoices(
+                database_id=invoice_db_id,
+                invoices=invoices,
+                update_existing=update_existing,
+                verbose=args.verbose
+            )
+            
+            console.print(f"\n[green]✓ Notion 저장 완료 (생성: {stats['created']}, 업데이트: {stats['updated']}, 스킵: {stats['skipped']})[/green]")
+        else:
+            console.print("[yellow]저장을 취소했습니다.[/yellow]")
+        
+    except Exception as e:
+        console.print(f"\n[red]❌ Invoice 조회 중 오류 발생: {e}[/red]")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
 
 
 def cli_mode(args) -> None:

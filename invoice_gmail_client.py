@@ -4,7 +4,7 @@ OpenAI Response API + Gmail MCP를 사용하여 이메일에서 invoice 정보 �
 """
 import json
 from typing import List, Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 import config
 import google_auth
 
@@ -12,7 +12,9 @@ import google_auth
 def fetch_invoices(
     search_keywords: Optional[str] = None,
     model: str = "gpt-4o-mini",
-    max_emails: int = 50,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    days: int = 90,
     verbose: bool = False
 ) -> List[Dict[str, Any]]:
     """
@@ -21,7 +23,9 @@ def fetch_invoices(
     Args:
         search_keywords: Gmail 검색 키워드 (None이면 config에서 가져옴)
         model: OpenAI 모델 (gpt-4o 또는 gpt-4o-mini)
-        max_emails: 최대 검색 메일 수
+        start_date: 검색 시작 날짜 (YYYY-MM-DD, None이면 days 사용)
+        end_date: 검색 종료 날짜 (YYYY-MM-DD, None이면 오늘)
+        days: start_date가 None일 때 최근 N일 검색 (기본: 90일)
         verbose: 상세 로그 출력
     
     Returns:
@@ -55,10 +59,23 @@ def fetch_invoices(
     if search_keywords is None:
         search_keywords = config.get_invoice_search_keywords()
     
+    # 날짜 범위 계산
+    if end_date is None:
+        end_date_obj = datetime.now()
+        end_date = end_date_obj.strftime("%Y-%m-%d")
+    else:
+        end_date_obj = datetime.strptime(end_date, "%Y-%m-%d")
+    
+    if start_date is None:
+        start_date_obj = end_date_obj - timedelta(days=days)
+        start_date = start_date_obj.strftime("%Y-%m-%d")
+    else:
+        start_date_obj = datetime.strptime(start_date, "%Y-%m-%d")
+    
     if verbose:
         print(f"[DEBUG] 검색 키워드: {search_keywords}")
         print(f"[DEBUG] 사용 모델: {model}")
-        print(f"[DEBUG] 최대 메일 수: {max_emails}")
+        print(f"[DEBUG] 검색 기간: {start_date} ~ {end_date}")
     
     # Google Access Token 가져오기
     if verbose:
@@ -84,7 +101,7 @@ def fetch_invoices(
     client = OpenAI(api_key=openai_api_key)
     
     # 프롬프트 생성
-    prompt = _create_extraction_prompt(search_keywords, max_emails)
+    prompt = _create_extraction_prompt(search_keywords, start_date, end_date)
     
     if verbose:
         print(f"\n[단계 2] Gmail 메일 검색 및 분석 중...")
@@ -163,12 +180,16 @@ def fetch_invoices(
     return validated_invoices
 
 
-def _create_extraction_prompt(search_keywords: str, max_emails: int) -> str:
+def _create_extraction_prompt(search_keywords: str, start_date: str, end_date: str) -> str:
     """Invoice 추출 프롬프트 생성"""
+    # Gmail 날짜 형식으로 변환 (YYYY/MM/DD)
+    gmail_start = start_date.replace("-", "/")
+    gmail_end = end_date.replace("-", "/")
+    
     return f"""
 Search Gmail for emails matching: "{search_keywords}"
 
-Limit to the most recent {max_emails} emails.
+Date range: after:{gmail_start} before:{gmail_end}
 
 For each invoice email found, extract the following information and return as a JSON array:
 
@@ -282,11 +303,11 @@ if __name__ == "__main__":
     print("📧 Gmail Invoice 추출 테스트\n")
     
     try:
-        # 테스트 실행
+        # 테스트 실행 (최근 30일)
         invoices = fetch_invoices(
             search_keywords="Your Replit receipt",
             model="gpt-4o-mini",
-            max_emails=10,
+            days=30,
             verbose=True
         )
         
