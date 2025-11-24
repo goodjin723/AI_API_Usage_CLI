@@ -55,7 +55,7 @@ def _get_default_config() -> Dict[str, Any]:
     return {
         "timezone": "Asia/Seoul",
         "default_date_range": {
-            "preset": "last-30-days"
+            "preset": "last-7-days"
         },
         "models": []
     }
@@ -205,6 +205,22 @@ def save_google_paths(credentials_path: str, tokens_path: str) -> None:
     config_data = get_config()
     config_data["google_credentials_path"] = credentials_path
     config_data["google_tokens_path"] = tokens_path
+    save_config(config_data)
+
+
+def get_invoice_search_keywords() -> str:
+    """
+    Gmail invoice 검색 키워드 가져오기
+    우선순위: config.json > 기본값 (Replit)
+    """
+    config_data = get_config()
+    return config_data.get("invoice_search_keywords", "Your Replit receipt")
+
+
+def save_invoice_search_keywords(keywords: str) -> None:
+    """Gmail invoice 검색 키워드를 config.json에 저장"""
+    config_data = get_config()
+    config_data["invoice_search_keywords"] = keywords
     save_config(config_data)
 
 

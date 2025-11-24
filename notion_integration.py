@@ -587,4 +587,280 @@ class NotionClient:
                     stats["skipped"] += 1
         
         return stats
+    
+    def create_invoice_page(
+        self,
+        database_id: str,
+        invoice_id: str,
+        date: str,
+        amount: float,
+        description: str,
+        period: str,
+        service: str,
+        email_subject: str,
+        verbose: bool = False
+    ) -> Optional[str]:
+        """
+        Invoice 페이지 생성
+        
+        Args:
+            database_id: Notion 데이터베이스 ID
+            invoice_id: Invoice ID
+            date: 날짜 (YYYY-MM-DD)
+            amount: 금액
+            description: 설명
+            period: 청구 기간
+            service: 서비스명
+            email_subject: 이메일 제목
+            verbose: 디버그 로그 출력
+        
+        Returns:
+            생성된 페이지 ID (실패 시 None)
+        """
+        try:
+            formatted_id = format_notion_id(database_id)
+            
+            if verbose:
+                print(f"[DEBUG] Invoice 페이지 생성 중: {invoice_id}")
+            
+            # 날짜 파싱
+            date_obj = datetime.strptime(date, "%Y-%m-%d")
+            date_str = date_obj.strftime("%Y-%m-%d")
+            
+            # 페이지 속성 구성
+            properties = {
+                "Invoice ID": {
+                    "title": [
+                        {
+                            "text": {
+                                "content": invoice_id
+                            }
+                        }
+                    ]
+                },
+                "Date": {
+                    "date": {
+                        "start": date_str
+                    }
+                },
+                "Amount ($)": {
+                    "number": amount
+                },
+                "Service": {
+                    "select": {
+                        "name": service
+                    }
+                },
+                "Description": {
+                    "rich_text": [
+                        {
+                            "text": {
+                                "content": description
+                            }
+                        }
+                    ]
+                },
+                "Period": {
+                    "rich_text": [
+                        {
+                            "text": {
+                                "content": period
+                            }
+                        }
+                    ]
+                },
+                "Email Subject": {
+                    "rich_text": [
+                        {
+                            "text": {
+                                "content": email_subject
+                            }
+                        }
+                    ]
+                }
+            }
+            
+            if verbose:
+                print(f"[DEBUG] Invoice 속성:")
+                print(f"  - Invoice ID: {invoice_id}")
+                print(f"  - Date: {date_str}")
+                print(f"  - Amount: ${amount:.2f}")
+                print(f"  - Service: {service}")
+            
+            # 페이지 생성
+            response = self.client.pages.create(
+                parent={"database_id": formatted_id},
+                properties=properties
+            )
+            
+            page_id = response.get("id")
+            if verbose:
+                print(f"[DEBUG] Invoice 페이지 생성 성공: {page_id}")
+            
+            return page_id
+            
+        except Exception as e:
+            print(f"[ERROR] Invoice 페이지 생성 실패: {e}")
+            if verbose:
+                import traceback
+                traceback.print_exc()
+            return None
+    
+    def find_existing_invoice(
+        self,
+        database_id: str,
+        invoice_id: str,
+        verbose: bool = False
+    ) -> Optional[str]:
+        """
+        기존 Invoice 페이지 찾기 (Invoice ID 기준)
+        
+        Args:
+            database_id: Notion 데이터베이스 ID
+            invoice_id: Invoice ID
+            verbose: 디버그 로그 출력
+        
+        Returns:
+            페이지 ID (없으면 None)
+        """
+        try:
+            formatted_id = format_notion_id(database_id)
+            
+            if verbose:
+                print(f"[DEBUG] Invoice 중복 체크: {invoice_id}")
+            
+            # HTTP API 직접 호출로 검색
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-type": "application/json",
+                "Notion-Version": "2022-06-28"
+            }
+            
+            query_payload = {
+                "filter": {
+                    "property": "Invoice ID",
+                    "title": {
+                        "equals": invoice_id
+                    }
+                }
+            }
+            
+            query_url = f"{self.api_base_url}/databases/{formatted_id}/query"
+            response = requests.post(query_url, headers=headers, json=query_payload)
+            
+            if response.status_code != 200:
+                if verbose:
+                    print(f"[ERROR] Notion API 쿼리 실패: {response.status_code}")
+                return None
+            
+            response_data = response.json()
+            results = response_data.get("results", [])
+            
+            if results:
+                page_id = results[0].get("id")
+                if verbose:
+                    print(f"[DEBUG] 기존 Invoice 발견: {page_id}")
+                return page_id
+            
+            if verbose:
+                print(f"[DEBUG] 중복 Invoice 없음")
+            
+            return None
+            
+        except Exception as e:
+            print(f"[ERROR] Invoice 검색 실패: {e}")
+            if verbose:
+                import traceback
+                traceback.print_exc()
+            return None
+    
+    def save_invoices(
+        self,
+        database_id: str,
+        invoices: List[Dict[str, Any]],
+        update_existing: bool = False,
+        verbose: bool = False
+    ) -> Dict[str, int]:
+        """
+        Invoice 데이터를 Notion에 저장
+        
+        Args:
+            database_id: Notion 데이터베이스 ID
+            invoices: Invoice 데이터 리스트
+            update_existing: 중복 시 업데이트 여부
+            verbose: 디버그 로그 출력
+        
+        Returns:
+            {"created": 생성 수, "updated": 업데이트 수, "skipped": 스킵 수}
+        """
+        stats = {"created": 0, "updated": 0, "skipped": 0}
+        
+        if not invoices:
+            print("[WARNING] 저장할 Invoice가 없습니다.")
+            return stats
+        
+        formatted_id = format_notion_id(database_id)
+        if verbose:
+            print(f"[DEBUG] Invoice 저장 시작: {len(invoices)}개")
+            print(f"[DEBUG] 데이터베이스 ID: {formatted_id}")
+        
+        for idx, invoice in enumerate(invoices, 1):
+            if verbose:
+                print(f"\n[DEBUG] Invoice {idx}/{len(invoices)} 처리 중...")
+            
+            invoice_id = invoice.get("invoice_id")
+            date = invoice.get("date")
+            amount = invoice.get("amount")
+            description = invoice.get("description", "N/A")
+            period = invoice.get("period", "N/A")
+            service = invoice.get("service", "Unknown")
+            email_subject = invoice.get("email_subject", "N/A")
+            
+            if not invoice_id or not date:
+                if verbose:
+                    print(f"[WARNING] 필수 필드 누락, 스킵")
+                stats["skipped"] += 1
+                continue
+            
+            # 기존 Invoice 확인
+            existing_page_id = self.find_existing_invoice(database_id, invoice_id, verbose)
+            
+            if existing_page_id:
+                if update_existing:
+                    if verbose:
+                        print(f"[DEBUG] 업데이트 모드: 기존 페이지 유지")
+                    # TODO: Invoice 업데이트 로직 (필요시 구현)
+                    stats["skipped"] += 1
+                else:
+                    print(f"[INFO] 중복 Invoice 스킵: {invoice_id}")
+                    if verbose:
+                        print(f"[DEBUG] 기존 페이지 ID: {existing_page_id}")
+                    stats["skipped"] += 1
+            else:
+                # 새로 생성
+                page_id = self.create_invoice_page(
+                    database_id=database_id,
+                    invoice_id=invoice_id,
+                    date=date,
+                    amount=amount,
+                    description=description,
+                    period=period,
+                    service=service,
+                    email_subject=email_subject,
+                    verbose=verbose
+                )
+                
+                if page_id:
+                    if verbose:
+                        print(f"[DEBUG] Invoice 생성 성공")
+                    stats["created"] += 1
+                else:
+                    if verbose:
+                        print(f"[DEBUG] Invoice 생성 실패")
+                    stats["skipped"] += 1
+        
+        if verbose:
+            print(f"\n[완료] Created: {stats['created']}, Skipped: {stats['skipped']}")
+        
+        return stats
 

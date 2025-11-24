@@ -9,12 +9,13 @@
   ],
   "notion_api_key": "ntn_YOUR_NOTION_API_KEY_HERE",
   "notion_databases": {
-    "database_key_1": "YOUR_NOTION_DATABASE_ID_1",
-    "database_key_2": "YOUR_NOTION_DATABASE_ID_2",
-    "replit": "YOUR_REPLIT_NOTION_DATABASE_ID"
+    "fal_ai_key_name_1": "YOUR_NOTION_DATABASE_ID_1",
+    "fal_ai_key_name_2": "YOUR_NOTION_DATABASE_ID_2",
+    "invoice": "YOUR_INVOICE_NOTION_DATABASE_ID"
   },
   "api_key": "YOUR_FAL_AI_ADMIN_API_KEY_HERE",
   "openai_api_key": "YOUR_OPENAI_API_KEY_HERE",
   "google_credentials_path": "./credentials.json",
-  "google_tokens_path": "./google_tokens.json"
+  "google_tokens_path": "./google_tokens.json",
+  "invoice_search_keywords": "Your Replit receipt"
 }
