@@ -285,6 +285,8 @@ Important extraction rules:
 6. "date" must be in YYYY-MM-DD format - use invoice date paid if available, otherwise use email sent date
 7. "period" should capture billing period if mentioned in email, otherwise use "N/A"
 8. "service" should identify the service provider from email sender or content (e.g., "Replit", "AWS", "Google Cloud")
+   - Use simple company/service names without special punctuation
+   - If company name contains commas (e.g., "Anthropic, PBC"), use without comma (e.g., "Anthropic PBC" or "Anthropic")
 9. "paid_status" should determine payment status - if it's a receipt/confirmation email, use "Paid"; if it mentions "pending" or "due", use "Unpaid" or "Pending"
 10. Extract data accurately from email body, subject, and metadata
 11. Focus on invoice/receipt/billing emails only, ignore other types
@@ -327,6 +329,11 @@ def _validate_invoice(invoice: Dict[str, Any], verbose: bool = False) -> Dict[st
     except (ValueError, TypeError):
         raise ValueError(f"잘못된 금액 형식: {invoice['amount']}")
     
+    # Service 이름 정제 (콤마를 하이픈으로 치환 - Notion Select 필드 호환성)
+    service_name = str(invoice["service"]).strip()
+    # 콤마를 " -"로 치환하여 하나의 서비스로 유지 (예: "anthropic, pbc" → "anthropic - pbc")
+    service_name = service_name.replace(",", " -")
+
     # 정제된 데이터 반환
     return {
         "invoice_id": str(invoice["invoice_id"]).strip(),
@@ -334,7 +341,7 @@ def _validate_invoice(invoice: Dict[str, Any], verbose: bool = False) -> Dict[st
         "amount": float(invoice["amount"]),
         "description": str(invoice.get("description", "N/A")).strip(),
         "period": str(invoice.get("period", "N/A")).strip(),
-        "service": str(invoice["service"]).strip(),
+        "service": service_name,
         "email_subject": str(invoice.get("email_subject", "N/A")).strip(),
         "paid_status": str(invoice.get("paid_status", "Paid")).strip()
     }

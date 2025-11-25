@@ -113,16 +113,20 @@ class NotionClient:
         date: str,
         model: str,
         time: Optional[str] = None,
+        auth_method: Optional[str] = None,
+        cost: Optional[float] = None,
         verbose: bool = False
     ) -> tuple[Optional[str], bool]:
         """
-        기존 페이지 찾기 (날짜 + 모델 조합, 시간 정보가 있으면 시간도 고려)
+        기존 페이지 찾기 (날짜 + 모델 + Key Name + Cost 조합, 시간 정보가 있으면 시간도 고려)
 
         Args:
             database_id: Notion 데이터베이스 ID
             date: 날짜 (YYYY-MM-DD 형식)
             model: 모델 ID
             time: 시간 정보 (HH:MM:SS 형식, 선택적)
+            auth_method: API 키 이름 (Key Name, 선택적)
+            cost: 비용 (선택적)
             verbose: 상세 디버깅 정보 출력 여부
 
         Returns:
@@ -136,7 +140,9 @@ class NotionClient:
 
             if verbose:
                 time_info = f", time={time}" if time else ""
-                print(f"[DEBUG] 중복 체크 시작: date={date}, model={model}{time_info}")
+                auth_info = f", auth_method={auth_method}" if auth_method else ""
+                cost_info = f", cost={cost}" if cost is not None else ""
+                print(f"[DEBUG] 중복 체크 시작: date={date}, model={model}{time_info}{auth_info}{cost_info}")
 
             # 먼저 날짜로만 필터링 (HTTP API 직접 호출)
             headers = {
@@ -204,6 +210,49 @@ class NotionClient:
                 if model_value == model:
                     if verbose:
                         print(f"[DEBUG]   → Model 일치!")
+
+                    # auth_method가 있으면 Key Name도 확인
+                    if auth_method:
+                        key_name_prop = properties.get("Key Name", {})
+                        key_name_value = None
+                        if key_name_prop.get("type") == "select":
+                            select = key_name_prop.get("select")
+                            if select:
+                                key_name_value = select.get("name", "")
+
+                        if verbose:
+                            print(f"[DEBUG]   - 추출된 Key Name 값: '{key_name_value}'")
+                            print(f"[DEBUG]   - 비교 대상 Key Name: '{auth_method}'")
+
+                        # Key Name이 일치하지 않으면 다음 페이지 검사
+                        if key_name_value != auth_method:
+                            if verbose:
+                                print(f"[DEBUG]   → Key Name 불일치, 다음 페이지 검사")
+                            continue
+
+                        if verbose:
+                            print(f"[DEBUG]   → Key Name 일치!")
+
+                    # cost가 있으면 Cost도 확인
+                    if cost is not None:
+                        cost_prop = properties.get("Cost ($)", {})
+                        cost_value = None
+                        if cost_prop.get("type") == "number":
+                            cost_value = cost_prop.get("number")
+
+                        if verbose:
+                            print(f"[DEBUG]   - 추출된 Cost 값: {cost_value}")
+                            print(f"[DEBUG]   - 비교 대상 Cost: {cost}")
+
+                        # Cost가 일치하지 않으면 다음 페이지 검사
+                        # 부동소수점 비교는 작은 오차 허용 (0.0001 이내)
+                        if cost_value is None or abs(cost_value - cost) > 0.0001:
+                            if verbose:
+                                print(f"[DEBUG]   → Cost 불일치, 다음 페이지 검사")
+                            continue
+
+                        if verbose:
+                            print(f"[DEBUG]   → Cost 일치!")
 
                     # 시간 정보가 있으면 시간도 확인
                     if time:
@@ -526,24 +575,27 @@ class NotionClient:
             date = record.get("date")
             model = record.get("model")
             time = record.get("time")  # 시간 정보 추출 (시/분 단위일 때만 존재)
+            auth_method = record.get("auth_method")  # API 키 이름 추출
             requests = record.get("requests", 0)
             quantity = record.get("quantity", 0)
             cost = record.get("cost", 0.0)
             unit_price = record.get("unit_price", 0.0)
-            
+
             if not date or not model:
                 if verbose:
                     print(f"[WARNING] 날짜 또는 모델이 없어서 스킵: date={date}, model={model}")
                 stats["skipped"] += 1
                 continue
-            
+
             # 기존 페이지 확인
             if verbose:
-                if time:
-                    print(f"[DEBUG] 기존 페이지 확인 중: date={date}, model={model}, time={time}")
-                else:
-                    print(f"[DEBUG] 기존 페이지 확인 중: date={date}, model={model}")
-            existing_page_id, needs_time_update = self.find_existing_page(database_id, date, model, time=time, verbose=verbose)
+                time_info = f", time={time}" if time else ""
+                auth_info = f", auth_method={auth_method}" if auth_method else ""
+                cost_info = f", cost={cost}" if cost else ""
+                print(f"[DEBUG] 기존 페이지 확인 중: date={date}, model={model}{time_info}{auth_info}{cost_info}")
+            existing_page_id, needs_time_update = self.find_existing_page(
+                database_id, date, model, time=time, auth_method=auth_method, cost=cost, verbose=verbose
+            )
 
             if existing_page_id:
                 if verbose:
@@ -588,11 +640,10 @@ class NotionClient:
             else:
                 if verbose:
                     print(f"[DEBUG] 새 페이지 생성 시도 중...")
-                # 새로 생성 (api_key는 record에서 가져옴)
-                api_key = record.get("auth_method")  # auth_method가 API 키 이름
+                # 새로 생성
                 page_id = self.create_page(
-                    database_id, date, model, requests, quantity, cost, unit_price, 
-                    api_key=api_key, time=time, verbose=verbose
+                    database_id, date, model, requests, quantity, cost, unit_price,
+                    api_key=auth_method, time=time, verbose=verbose
                 )
                 if page_id:
                     if verbose:
