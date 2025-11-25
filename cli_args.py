@@ -15,10 +15,17 @@ def parse_args() -> argparse.Namespace:
 
     # API 키
     parser.add_argument(
-        "-api-key",
+        "-fal-ai-api-key",
         type=str,
         default=None,
         help="fal.ai Admin API 키 (환경 변수 FAL_ADMIN_API_KEY도 지원)"
+    )
+
+    parser.add_argument(
+        "-open-ai-api-key",
+        type=str,
+        default=None,
+        help="OpenAI API 키 (환경 변수 OPENAI_API_KEY도 지원)"
     )
 
     # 모델 목록

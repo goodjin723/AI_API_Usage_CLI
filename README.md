@@ -98,7 +98,7 @@ python main.py
 ### 방법 4: CLI 인자 사용 (1회성)
 
 ```bash
-python main.py -api-key <your-fal-ai-admin-key>
+python main.py -fal-ai-api-key <your-fal-ai-admin-key>
 ```
 
 &nbsp;
@@ -398,7 +398,7 @@ python main.py -invoice \
 
 | 인자 | 설명 | 예제 |
 |------|------|------|
-| `-api-key` | fal.ai Admin API 키 | `-api-key "your-key"` |
+| `-fal-ai-api-key` | fal.ai Admin API 키 | `-fal-ai-api-key "your-key"` |
 | `-models` | 추적할 모델 목록 (쉼표 구분) | `-models "model1,model2"` |
 | `-preset` | 빠른 날짜 범위 선택 | `-preset last-7-days` |
 | `-start-date` | 시작 날짜 (YYYY-MM-DD) | `-start-date 2025-01-01` |
@@ -417,6 +417,7 @@ python main.py -invoice \
 | `-invoice-start-date` | 검색 시작 날짜 (YYYY-MM-DD) | - | `-invoice-start-date 2025-01-01` |
 | `-invoice-end-date` | 검색 종료 날짜 (YYYY-MM-DD) | - | `-invoice-end-date 2025-01-31` |
 | `-invoice-days` | 최근 N일 검색 | 90 | `-invoice-days 30` |
+| `-open-ai-api-key` | OpenAI API 키 (Gmail MCP용) | config.json | `-open-ai-api-key "your-key"` |
 
 ### Preset 옵션
 

@@ -61,7 +61,7 @@ def parse_date_range(args) -> tuple[datetime, datetime]:
 def validate_and_execute_query(args) -> None:
     """필수 값 검증 후 조회 실행"""
     # API 키 확인
-    api_key = config.get_api_key(args.api_key)
+    api_key = config.get_api_key(args.fal_ai_api_key)
     if not api_key:
         console.print("\n[red]API 키가 설정되지 않았습니다.[/red]")
         console.print("[yellow]메뉴에서 '3. API 키 설정'을 선택하여 API 키를 설정해주세요.[/yellow]")
@@ -313,7 +313,7 @@ def main():
         # CLI 인자가 모두 비어있으면 인터랙티브 모드
         # 기본값이 설정된 인자는 제외하고, 실제로 사용자가 명시한 인자만 체크
         has_cli_args = any([
-            args.api_key,
+            args.fal_ai_api_key,
             args.models,
             args.preset,
             args.start_date,
@@ -404,7 +404,8 @@ def execute_invoice_query(invoice_settings: Dict[str, Any], args) -> None:
                 start_date=start_date,
                 end_date=end_date,
                 days=days,
-                verbose=args.verbose
+                verbose=args.verbose,
+                openai_api_key=args.open_ai_api_key
             )
         
         if not invoices:
@@ -482,11 +483,11 @@ def cli_mode(args) -> None:
 def cli_fal_ai_mode(args) -> None:
     """CLI 모드 - fal.ai 사용량 추적"""
     # API 키 가져오기
-    api_key = config.get_api_key(args.api_key)
+    api_key = config.get_api_key(args.fal_ai_api_key)
     if not api_key:
         raise ValueError(
             "fal.ai Admin API 키가 필요합니다. "
-            "환경 변수 FAL_ADMIN_API_KEY를 설정하거나 -api-key 옵션을 사용하세요."
+            "환경 변수 FAL_ADMIN_API_KEY를 설정하거나 -fal-ai-api-key 옵션을 사용하세요."
         )
 
     # 모델 목록 가져오기
@@ -547,7 +548,8 @@ def cli_invoice_mode(args) -> None:
             start_date=start_date,
             end_date=end_date,
             days=days,
-            verbose=args.verbose
+            verbose=args.verbose,
+            openai_api_key=args.open_ai_api_key
         )
 
     if not invoices:

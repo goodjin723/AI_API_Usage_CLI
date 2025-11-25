@@ -15,7 +15,8 @@ def fetch_invoices(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     days: int = 90,
-    verbose: bool = False
+    verbose: bool = False,
+    openai_api_key: Optional[str] = None
 ) -> List[Dict[str, Any]]:
     """
     Gmail에서 invoice 메일을 검색하고 구조화된 데이터로 추출 (다중 키워드 지원)
@@ -27,6 +28,7 @@ def fetch_invoices(
         end_date: 검색 종료 날짜 (YYYY-MM-DD, None이면 오늘)
         days: start_date가 None일 때 최근 N일 검색 (기본: 90일)
         verbose: 상세 로그 출력
+        openai_api_key: OpenAI API 키 (None이면 config 또는 환경 변수에서 가져옴)
     
     Returns:
         List[Dict]: Invoice 데이터 리스트 (모든 키워드의 결과 합침)
@@ -77,6 +79,7 @@ def fetch_invoices(
                 start_date=start_date,
                 end_date=end_date,
                 days=days,
+                openai_api_key=openai_api_key,
                 verbose=verbose
             )
             
@@ -113,7 +116,8 @@ def _fetch_invoices_single_keyword(
     start_date: Optional[str],
     end_date: Optional[str],
     days: int,
-    verbose: bool
+    verbose: bool,
+    openai_api_key: Optional[str] = None
 ) -> List[Dict[str, Any]]:
     """
     단일 검색 키워드로 invoice 검색 (내부 헬퍼 함수)
@@ -156,15 +160,15 @@ def _fetch_invoices_single_keyword(
         print("✓ Google 인증 완료")
     
     # OpenAI API 키 가져오기
-    openai_api_key = config.get_openai_api_key()
-    if not openai_api_key:
+    api_key = config.get_openai_api_key(openai_api_key)
+    if not api_key:
         raise ValueError(
             "OpenAI API 키가 필요합니다.\n"
-            "환경 변수 OPENAI_API_KEY를 설정하거나 config.json에 추가하세요."
+            "환경 변수 OPENAI_API_KEY를 설정하거나 config.json에 추가하거나 -open-ai-api-key 옵션을 사용하세요."
         )
     
     # OpenAI 클라이언트 생성
-    client = OpenAI(api_key=openai_api_key)
+    client = OpenAI(api_key=api_key)
     
     # 프롬프트 생성
     prompt = _create_extraction_prompt(keyword, start_date, end_date)
